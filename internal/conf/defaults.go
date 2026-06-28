@@ -121,6 +121,14 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.soundlevel.enabled", false)
 	viper.SetDefault("realtime.audio.soundlevel.interval", 10)
 
+	// HTTP chunk upload proof-of-concept configuration
+	viper.SetDefault("realtime.audio.chunkupload.enabled", false)
+	viper.SetDefault("realtime.audio.chunkupload.token", "")
+	viper.SetDefault("realtime.audio.chunkupload.path", "chunks/inbox")
+	viper.SetDefault("realtime.audio.chunkupload.save", true)
+	viper.SetDefault("realtime.audio.chunkupload.maxbytes", int64(5*1024*1024))
+	viper.SetDefault("realtime.audio.chunkupload.maxseconds", 15)
+
 	// Audio capture configuration
 	viper.SetDefault("realtime.audio.export.debug", false)
 	viper.SetDefault("realtime.audio.export.enabled", true)

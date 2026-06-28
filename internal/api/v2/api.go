@@ -630,6 +630,7 @@ func (c *Controller) initRoutes() {
 		{"filesystem routes", func() { c.filesystem.RegisterRoutes(c.Group) }},
 		{"stream health routes", func() { c.audio.RegisterStreamHealthRoutes(c.Group) }},
 		{"stream test routes", func() { c.audio.RegisterStreamTestRoutes(c.Group) }},
+		{"stream chunk upload routes", func() { c.audio.RegisterChunkUploadRoutes(c.Group) }},
 		{"audio health routes", func() { c.audio.RegisterAudioHealthRoutes(c.Group) }},
 		{"quiet hours routes", func() { c.audio.RegisterQuietHoursRoutes(c.Group) }},
 		{"audio level routes", func() { c.audio.RegisterAudioLevelRoutes(c.Group) }},

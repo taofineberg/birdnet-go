@@ -393,6 +393,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts (settings-only)            |
 | GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)               |
 | POST   | `/streams/test`          | `TestStream`              | ✅   | Test a stream URL to verify connectivity and discover audio properties (sample rate, codec, bat compatibility) |
+| POST   | `/streams/chunks/:source`| `UploadAudioChunk`        | ❌🔐 | Upload a WAV chunk with bearer-token auth for push-audio proof of concept             |
 
 ### Quiet Hours Status (`audio/quiet_hours.go`)
 

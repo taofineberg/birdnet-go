@@ -106,10 +106,22 @@ type AudioSettings struct {
 	StreamTransport string              `yaml:"streamtransport" json:"streamTransport"`                         // preferred transport for audio streaming: "auto", "sse", or "ws"
 	Export          ExportSettings      `yaml:"export" json:"export"`                                           // export settings
 	SoundLevel      SoundLevelSettings  `yaml:"soundlevel" json:"soundLevel"`                                   // sound level monitoring settings
+	ChunkUpload     ChunkUploadSettings `yaml:"chunkupload" json:"chunkUpload" mapstructure:"chunkupload"`    // optional HTTP chunk upload ingest
 
 	Equalizer  EqualizerSettings `yaml:"equalizer" json:"equalizer"`                             // equalizer settings (global default)
 	QuietHours QuietHoursConfig  `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"` // quiet hours (global default, legacy)
 	Watchdog   WatchdogSettings  `yaml:"watchdog" json:"watchdog" mapstructure:"watchdog"`       // liveness watchdog tuning (0 = use default)
+}
+
+// ChunkUploadSettings controls the HTTP push upload endpoint for WAV chunks.
+// This is a fork-level proof-of-concept path used for constrained devices.
+type ChunkUploadSettings struct {
+	Enabled    bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`       // enable chunk upload endpoint
+	Token      string `yaml:"token" json:"token" mapstructure:"token"`             // bearer token for upload auth
+	Path       string `yaml:"path" json:"path" mapstructure:"path"`                // directory where uploaded chunks are saved
+	Save       bool   `yaml:"save" json:"save" mapstructure:"save"`                // persist uploaded chunks to disk
+	MaxBytes   int64  `yaml:"maxbytes" json:"maxBytes" mapstructure:"maxbytes"`    // per-request upload cap in bytes
+	MaxSeconds int    `yaml:"maxseconds" json:"maxSeconds" mapstructure:"maxseconds"` // metadata hint for client-side chunk duration
 }
 
 // WatchdogSettings holds user-tunable parameters for the audio liveness watchdog.

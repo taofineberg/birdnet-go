@@ -186,6 +186,7 @@ export interface ChunkUploadSettings {
   save: boolean;
   maxBytes: number;
   maxSeconds: number;
+  models: string[];
 }
 
 // Stream type constants
@@ -949,6 +950,7 @@ function createEmptySettings(): SettingsFormData {
           save: true,
           maxBytes: 5 * 1024 * 1024,
           maxSeconds: 15,
+          models: ['birdnet'],
         },
         equalizer: {
           enabled: false,

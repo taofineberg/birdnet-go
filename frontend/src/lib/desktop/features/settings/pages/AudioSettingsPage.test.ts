@@ -46,6 +46,15 @@ vi.mock('$lib/utils/settingsChanges', () => ({
   }),
 }));
 
+vi.mock('$lib/stores/models.svelte', () => ({
+  DEFAULT_MODEL_ID: 'birdnet',
+  fetchModels: vi.fn(() => () => undefined),
+  getAvailableModels: vi.fn(() => [
+    { id: 'birdnet', name: 'BirdNET v2.4 (TFLite)', category: 'bird' },
+    { id: 'perch_v2', name: 'Perch v2', category: 'bird' },
+  ]),
+}));
+
 // Mock StreamManager component
 vi.mock('$lib/desktop/components/forms/StreamManager.svelte');
 
@@ -255,6 +264,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
               save: true,
               maxBytes: 5 * 1024 * 1024,
               maxSeconds: 15,
+              models: ['birdnet'],
             },
             equalizer: {
               enabled: false,
@@ -316,6 +326,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
               save: true,
               maxBytes: 5 * 1024 * 1024,
               maxSeconds: 15,
+              models: ['birdnet'],
             },
             equalizer: {
               enabled: false,
@@ -472,17 +483,20 @@ describe('AudioSettingsPage - Stream Configuration', () => {
       expect(screen.getByLabelText('Save Path')).toHaveValue('chunks/inbox');
       expect(screen.getByLabelText('Max Upload Size (MiB)')).toHaveValue(5);
       expect(screen.getByLabelText('Max Chunk Duration (seconds)')).toHaveValue(15);
+      expect(screen.getByLabelText('BirdNET v2.4 (TFLite)')).toBeChecked();
     });
 
-    it('updates chunk upload enabled, save, and token settings', async () => {
+    it('updates chunk upload enabled, save, token, and model settings', async () => {
       const { settingsStore } = await import('$lib/stores/settings');
 
       await openUploadTab();
 
       await fireEvent.click(screen.getByLabelText('Enable Chunk Uploads'));
+      await waitFor(() => expect(screen.getByLabelText('Perch v2')).not.toBeDisabled());
       await fireEvent.input(screen.getByLabelText('Bearer Token'), {
         target: { value: 'secret-token' },
       });
+      await fireEvent.click(screen.getByLabelText('Perch v2'));
       await fireEvent.click(screen.getByLabelText('Save Uploaded Chunks'));
 
       await waitFor(() => {
@@ -490,6 +504,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
         expect(uploadSettings?.enabled).toBe(true);
         expect(uploadSettings?.token).toBe('secret-token');
         expect(uploadSettings?.save).toBe(false);
+        expect(uploadSettings?.models).toEqual(['birdnet', 'perch_v2']);
       });
     });
 
@@ -519,6 +534,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
         save: true,
         maxBytes: 5 * 1024 * 1024,
         maxSeconds: 15,
+        models: ['birdnet'],
       };
       const modified = {
         ...original,

@@ -559,6 +559,13 @@
         "maxseconds": {
           "type": "integer",
           "description": "metadata hint for client-side chunk duration"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "model IDs for chunk upload sources"
         }
       },
       "additionalProperties": false,

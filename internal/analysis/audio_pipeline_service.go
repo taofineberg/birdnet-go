@@ -82,6 +82,9 @@ type AudioPipelineService struct {
 	// active for that source. Populated by registerSoundLevelConsumers, drained
 	// by removeAllSoundLevelConsumers.
 	soundLevelConsumers map[string]string
+
+	chunkUploadMu     sync.Mutex
+	chunkUploadPacers map[string]*chunkUploadPacer
 }
 
 // NewAudioPipelineService creates a new AudioPipelineService with the given dependencies.
@@ -899,10 +902,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 	// Build a lookup of all loaded model infos keyed by registry ID.
 	modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
-	allModelInfos := make(map[string]classifier.ModelInfo, len(modelInfoSlice))
-	for i := range modelInfoSlice {
-		allModelInfos[modelInfoSlice[i].ID] = modelInfoSlice[i]
-	}
+	allModelInfos := loadedModelInfoMap(modelInfoSlice)
 
 	// Primary model fallback targets for sources with no model config.
 	primaryTargets := []classifier.ModelInfo{p.bnAnalyzer.BirdNET().PrimaryModelInfo()}
@@ -1548,10 +1548,7 @@ func (p *AudioPipelineService) probeStreamSampleRate(url, name string) streamPro
 func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]string, sourceIDs []string) map[string][]monitorConfig {
 	// Build lookup of loaded models by registry ID.
 	modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
-	loadedModels := make(map[string]classifier.ModelInfo, len(modelInfoSlice))
-	for i := range modelInfoSlice {
-		loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
-	}
+	loadedModels := loadedModelInfoMap(modelInfoSlice)
 
 	primaryInfo := p.bnAnalyzer.BirdNET().PrimaryModelInfo()
 	result := make(map[string][]monitorConfig, len(sourceIDs))
@@ -1619,6 +1616,14 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 		targets = append(targets, info)
 	}
 	return targets
+}
+
+func loadedModelInfoMap(modelInfos []classifier.ModelInfo) map[string]classifier.ModelInfo {
+	loadedModels := make(map[string]classifier.ModelInfo, len(modelInfos))
+	for i := range modelInfos {
+		loadedModels[modelInfos[i].ID] = modelInfos[i]
+	}
+	return loadedModels
 }
 
 // startWeatherPolling initializes and starts the weather polling routine.

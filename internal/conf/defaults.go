@@ -128,6 +128,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.chunkupload.save", true)
 	viper.SetDefault("realtime.audio.chunkupload.maxbytes", int64(5*1024*1024))
 	viper.SetDefault("realtime.audio.chunkupload.maxseconds", 15)
+	viper.SetDefault("realtime.audio.chunkupload.models", []string{"birdnet"})
 
 	// Audio capture configuration
 	viper.SetDefault("realtime.audio.export.debug", false)

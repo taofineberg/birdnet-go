@@ -29,6 +29,7 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import StreamManager from '$lib/desktop/components/forms/StreamManager.svelte';
   import SoundCardManager from '$lib/desktop/components/forms/SoundCardManager.svelte';
+  import ModelCheckboxList from '$lib/desktop/components/forms/ModelCheckboxList.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -75,6 +76,7 @@
   import { type AudioDevice } from '$lib/utils/audioDevices';
   import { normalizeForLookup } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
 
   const logger = loggers.audio;
   const BYTES_PER_MIB = 1024 * 1024;
@@ -84,12 +86,30 @@
   const MAX_CHUNK_UPLOAD_MIB = 100;
   const MIN_CHUNK_UPLOAD_SECONDS = 1;
   const MAX_CHUNK_UPLOAD_SECONDS = 300;
+  const DEFAULT_CHUNK_UPLOAD_MODELS = [DEFAULT_MODEL_ID];
 
   // Storage key for remembering last active tab
   const STORAGE_KEY = 'birdnet-audio-settings-active-tab';
 
   // Tab state management
   let activeTab = $state(localStorage.getItem(STORAGE_KEY) || 'soundcard');
+  const availableModels = $derived(getAvailableModels());
+
+  function getDefaultChunkUploadModels(): string[] {
+    if (availableModels.some(m => m.id === DEFAULT_MODEL_ID)) {
+      return [DEFAULT_MODEL_ID];
+    }
+    return availableModels.length > 0 ? [availableModels[0].id] : [...DEFAULT_CHUNK_UPLOAD_MODELS];
+  }
+
+  function normalizeChunkUploadModels(models: string[] | undefined): string[] {
+    const selected = models?.filter(model => model.trim().length > 0) ?? [];
+    return selected.length > 0 ? selected : getDefaultChunkUploadModels();
+  }
+
+  $effect(() => {
+    return fetchModels();
+  });
 
   // PERFORMANCE OPTIMIZATION: Localized option arrays - memoized to prevent unnecessary recomputations
   // These will only recompute when the locale changes, not on every reactive update
@@ -142,6 +162,7 @@
           save: true,
           maxBytes: DEFAULT_CHUNK_UPLOAD_MAX_BYTES,
           maxSeconds: DEFAULT_CHUNK_UPLOAD_MAX_SECONDS,
+          models: [...DEFAULT_CHUNK_UPLOAD_MODELS],
         },
         equalizer: {
           enabled: false,
@@ -192,6 +213,7 @@
             save: audioBase.chunkUpload?.save ?? true,
             maxBytes: audioBase.chunkUpload?.maxBytes ?? DEFAULT_CHUNK_UPLOAD_MAX_BYTES,
             maxSeconds: audioBase.chunkUpload?.maxSeconds ?? DEFAULT_CHUNK_UPLOAD_MAX_SECONDS,
+            models: normalizeChunkUploadModels(audioBase.chunkUpload?.models),
           },
           equalizer: {
             enabled: audioBase.equalizer?.enabled ?? false,
@@ -839,6 +861,14 @@
             class="space-y-4 transition-opacity duration-200"
             class:opacity-50={!settings.audio.chunkUpload.enabled}
           >
+            <ModelCheckboxList
+              models={availableModels}
+              selectedModels={settings.audio.chunkUpload.models}
+              sourceSampleRate={48000}
+              disabled={!settings.audio.chunkUpload.enabled || store.isLoading || store.isSaving}
+              onToggle={models => updateChunkUploadSettings({ models })}
+            />
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PasswordField
                 label={t('settings.audio.chunkUpload.tokenLabel')}

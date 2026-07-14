@@ -1630,6 +1630,8 @@ realtime:
       save: true
       maxbytes: 5242880
       maxseconds: 15
+      models:
+        - birdnet
 ```
 
 Upload endpoint:

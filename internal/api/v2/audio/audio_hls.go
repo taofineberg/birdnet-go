@@ -92,6 +92,12 @@ const (
 	// checks to avoid adding I/O load on every playlist poll.
 	hlsFreshnessCheckInterval = 10 * time.Second
 
+	// Chunk-upload HLS streams arrive in large bursts. Buffer and pace them so
+	// playback behaves like a delayed live stream instead of visible chunks.
+	hlsChunkPacerDelay         = 15 * time.Second
+	hlsChunkPacerFrameDuration = 100 * time.Millisecond
+	hlsChunkPacerMaxBuffer     = 60 * time.Second
+
 	// Session ID validation
 
 	// FFmpeg HLS muxer settings
@@ -350,14 +356,18 @@ func (c *Handler) StartHLSStream(ctx echo.Context) error {
 		logger.String("client_id", clientID),
 		logger.Bool("force_restart", forceRestart))
 
-	// Verify source exists by checking for a capture buffer
+	// Resolve configured sources, including chunk-upload aliases. Regular live
+	// sources are validated through their capture buffer; push-based chunk
+	// sources are resolved through the source registry.
 	eng := c.Engine.Load()
 	if eng == nil {
 		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
 	}
-	if _, bufErr := eng.BufferManager().CaptureBuffer(sourceID); bufErr != nil {
+	resolvedSourceID, sourceErr := c.resolveHLSAudioSourceID(sourceID)
+	if sourceErr != nil {
 		return c.respondNoCaptureBuffer(ctx, eng, sourceID)
 	}
+	sourceID = resolvedSourceID
 
 	// Check for existing healthy stream first (reuse if possible)
 	if existingStream := c.getHLSStream(sourceID); existingStream != nil && !forceRestart {
@@ -986,6 +996,26 @@ func (c *Handler) validateAndDecodeSourceID(ctx echo.Context) (string, error) {
 	return decodedSourceID, nil
 }
 
+func (c *Handler) resolveHLSAudioSourceID(sourceID string) (string, error) {
+	eng := c.Engine.Load()
+	if eng == nil {
+		return "", fmt.Errorf("audio engine not initialized")
+	}
+	if _, bufErr := eng.BufferManager().CaptureBuffer(sourceID); bufErr == nil {
+		return sourceID, nil
+	}
+	if src, ok := eng.Registry().Get(sourceID); ok && src.Type == audiocore.SourceTypeChunkUpload {
+		return sourceID, nil
+	}
+
+	chunkSourceID := "chunk_" + sourceID
+	if src, ok := eng.Registry().Get(chunkSourceID); ok && src.Type == audiocore.SourceTypeChunkUpload {
+		return chunkSourceID, nil
+	}
+
+	return "", audiocore.ErrSourceNotFound
+}
+
 // generateClientID creates a standardized client identifier
 // Uses RemoteAddr (not RealIP) for consistency with audio_level.go to prevent IP spoofing
 func (c *Handler) generateClientID(ctx echo.Context) string {
@@ -1574,13 +1604,16 @@ func (c *Handler) setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd, hl
 // hlsConsumer implements audiocore.AudioConsumer for HLS streaming.
 // It forwards audio frames to a channel for FFmpeg encoding.
 type hlsConsumer struct {
-	id       string
-	sourceID string
-	ch       chan []byte
-	rate     int
-	depth    int
-	channels int
-	closed   atomic.Bool
+	id        string
+	sourceID  string
+	ch        chan []byte
+	rate      int
+	depth     int
+	channels  int
+	closed    atomic.Bool
+	pacedIn   chan []byte
+	pacedDone chan struct{}
+	closeOnce sync.Once
 
 	// Drop tracking for diagnostics
 	dropCount   int64
@@ -1614,6 +1647,45 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 	// Copy once up front. Both select arms below need an owned slice.
 	buf := slices.Clone(frame.Data)
 
+	if h.pacedIn != nil {
+		h.sendToPacedInput(buf)
+		return nil
+	}
+
+	h.sendToOutput(buf)
+	return nil
+}
+
+// Close marks the consumer as closed.
+func (h *hlsConsumer) Close() error {
+	h.closed.Store(true)
+	h.closeOnce.Do(func() {
+		if h.pacedDone != nil {
+			close(h.pacedDone)
+		}
+	})
+	return nil
+}
+
+func (h *hlsConsumer) sendToPacedInput(buf []byte) {
+	select {
+	case h.pacedIn <- buf:
+	default:
+		dropped := false
+		select {
+		case <-h.pacedIn:
+			dropped = true
+		default:
+		}
+		select {
+		case h.pacedIn <- buf:
+		default:
+		}
+		h.logDrop(dropped, cap(h.pacedIn))
+	}
+}
+
+func (h *hlsConsumer) sendToOutput(buf []byte) {
 	select {
 	case h.ch <- buf:
 	default:
@@ -1629,30 +1701,81 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 		case h.ch <- buf:
 		default:
 		}
-
-		if dropped {
-			h.dropMu.Lock()
-			h.dropCount++
-			now := time.Now()
-			if now.Sub(h.lastDropLog) >= hlsDropLogInterval {
-				sanitizedID := privacy.SanitizeRTSPUrl(h.sourceID)
-				apicore.GetLogger().Warn("HLS audio data dropped: channel full",
-					logger.String("source_id", sanitizedID),
-					logger.Int64("drops_since_last_log", h.dropCount),
-					logger.Int("channel_cap", defaultReadBufferSize))
-				h.dropCount = 0
-				h.lastDropLog = now
-			}
-			h.dropMu.Unlock()
-		}
+		h.logDrop(dropped, cap(h.ch))
 	}
-	return nil
 }
 
-// Close marks the consumer as closed.
-func (h *hlsConsumer) Close() error {
-	h.closed.Store(true)
-	return nil
+func (h *hlsConsumer) logDrop(dropped bool, channelCap int) {
+	if !dropped {
+		return
+	}
+	h.dropMu.Lock()
+	defer h.dropMu.Unlock()
+	h.dropCount++
+	now := time.Now()
+	if now.Sub(h.lastDropLog) >= hlsDropLogInterval {
+		sanitizedID := privacy.SanitizeRTSPUrl(h.sourceID)
+		apicore.GetLogger().Warn("HLS audio data dropped: channel full",
+			logger.String("source_id", sanitizedID),
+			logger.Int64("drops_since_last_log", h.dropCount),
+			logger.Int("channel_cap", channelCap))
+		h.dropCount = 0
+		h.lastDropLog = now
+	}
+}
+
+func (h *hlsConsumer) runChunkPacer() {
+	bytesPerSample := h.depth / 8
+	bytesPerSecond := h.rate * h.channels * bytesPerSample
+	if bytesPerSample <= 0 || bytesPerSecond <= 0 {
+		return
+	}
+
+	frameBytes := int(hlsChunkPacerFrameDuration.Seconds() * float64(bytesPerSecond))
+	if frameBytes < bytesPerSample {
+		frameBytes = bytesPerSample
+	}
+	frameBytes -= frameBytes % bytesPerSample
+	delayBytes := int(hlsChunkPacerDelay.Seconds()) * bytesPerSecond
+	maxBytes := int(hlsChunkPacerMaxBuffer.Seconds()) * bytesPerSecond
+	queue := make([]byte, 0, delayBytes+frameBytes)
+
+	appendPCM := func(pcm []byte) {
+		queue = append(queue, pcm...)
+		if len(queue) <= maxBytes {
+			return
+		}
+		drop := len(queue) - maxBytes
+		drop += drop % bytesPerSample
+		queue = slices.Clone(queue[drop:])
+	}
+
+	for {
+		for len(queue) < delayBytes {
+			select {
+			case <-h.pacedDone:
+				return
+			case pcm := <-h.pacedIn:
+				appendPCM(pcm)
+			}
+		}
+
+		ticker := time.NewTicker(hlsChunkPacerFrameDuration)
+		for len(queue) >= frameBytes {
+			select {
+			case <-h.pacedDone:
+				ticker.Stop()
+				return
+			case pcm := <-h.pacedIn:
+				appendPCM(pcm)
+			case <-ticker.C:
+				frame := slices.Clone(queue[:frameBytes])
+				queue = queue[frameBytes:]
+				h.sendToOutput(frame)
+			}
+		}
+		ticker.Stop()
+	}
 }
 
 // setupAudioCallback sets up the audio callback channel using the AudioRouter.
@@ -1693,6 +1816,11 @@ func (c *Handler) setupAudioCallback(sourceID string) (audioChan chan []byte, cl
 	sourceName := sourceID
 	if src != nil {
 		sourceName = src.DisplayName
+	}
+	if src != nil && src.Type == audiocore.SourceTypeChunkUpload {
+		consumer.pacedIn = make(chan []byte, 8)
+		consumer.pacedDone = make(chan struct{})
+		go consumer.runChunkPacer()
 	}
 	eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sampleRate)
 

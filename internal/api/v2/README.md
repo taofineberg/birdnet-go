@@ -414,7 +414,8 @@ pipeline as source `chunk_<source>`.
         "path": "chunks/inbox",
         "save": true,
         "maxBytes": 5242880,
-        "maxSeconds": 15
+        "maxSeconds": 15,
+        "models": ["birdnet"]
       }
     }
   }

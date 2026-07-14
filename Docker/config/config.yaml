@@ -240,11 +240,11 @@ main:
 birdnet:
     debug: false
     sensitivity: 1
-    threshold: 0.7
-    overlap: 1.5
-    longitude: 0
-    latitude: 0
-    locationconfigured: false
+    threshold: 0.4
+    overlap: 0
+    longitude: 31.178
+    latitude: -26.238
+    locationconfigured: true
     threads: 0
     locale: en-us
     rangefilter:
@@ -285,9 +285,11 @@ realtime:
         sources:
             - name: Sound Card 1
               device: sysdefault
+              samplerate: 48000
               gain: 0
               models:
                 - birdnet
+                - perch_v2
               quietHours:
                 enabled: false
                 mode: ""
@@ -334,6 +336,9 @@ realtime:
             save: false
             maxbytes: 5242880
             maxseconds: 15
+            models:
+                - birdnet
+                - perch_v2
         equalizer:
             enabled: false
             filters:
@@ -491,7 +496,8 @@ realtime:
                 - /
     species:
         include: []
-        exclude: []
+        exclude:
+            - Tringa nebularia
         config: {}
     weather:
         provider: yrno
@@ -523,16 +529,16 @@ realtime:
             windowdays: 7
             seasons:
                 fall:
-                    startmonth: 9
-                    startday: 22
-                spring:
                     startmonth: 3
                     startday: 20
+                spring:
+                    startmonth: 9
+                    startday: 22
                 summer:
-                    startmonth: 6
+                    startmonth: 12
                     startday: 21
                 winter:
-                    startmonth: 12
+                    startmonth: 6
                     startday: 21
     extendedcapture:
         enabled: false

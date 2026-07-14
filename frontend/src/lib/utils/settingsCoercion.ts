@@ -214,6 +214,14 @@ function coerceRTSPSettings(settings: unknown): UnknownSettings {
   };
 }
 
+function coerceModelIDs(value: unknown, defaultValue: string[] = ['birdnet']): string[] {
+  const models = coerceArray(value, defaultValue)
+    .map(model => coerceString(model, '').trim())
+    .filter(model => model.length > 0);
+
+  return models.length > 0 ? models : defaultValue;
+}
+
 /**
  * Validate and coerce BirdNET settings
  */
@@ -308,6 +316,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
         MAX_CHUNK_UPLOAD_MAX_SECONDS,
         DEFAULT_CHUNK_UPLOAD_MAX_SECONDS
       ),
+      models: coerceModelIDs(upload.models),
     };
   }
 

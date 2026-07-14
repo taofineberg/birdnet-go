@@ -61,6 +61,10 @@
           "$ref": "#/$defs/SoundLevelSettings",
           "description": "sound level monitoring settings"
         },
+        "chunkupload": {
+          "$ref": "#/$defs/ChunkUploadSettings",
+          "description": "optional HTTP chunk upload ingest"
+        },
         "equalizer": {
           "$ref": "#/$defs/EqualizerSettings",
           "description": "equalizer settings (global default)"
@@ -529,6 +533,37 @@
       "additionalProperties": false,
       "type": "object",
       "description": "BirdweatherSettings contains settings for BirdWeather API integration."
+    },
+    "ChunkUploadSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "enable chunk upload endpoint"
+        },
+        "token": {
+          "type": "string",
+          "description": "bearer token for upload auth"
+        },
+        "path": {
+          "type": "string",
+          "description": "directory where uploaded chunks are saved"
+        },
+        "save": {
+          "type": "boolean",
+          "description": "persist uploaded chunks to disk"
+        },
+        "maxbytes": {
+          "type": "integer",
+          "description": "per-request upload cap in bytes"
+        },
+        "maxseconds": {
+          "type": "integer",
+          "description": "metadata hint for client-side chunk duration"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ChunkUploadSettings controls the HTTP push upload endpoint for WAV chunks."
     },
     "CircuitBreakerConfig": {
       "properties": {

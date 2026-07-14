@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import AudioSettingsPage from './AudioSettingsPage.svelte';
 import type { SettingsFormData, StreamConfig } from '$lib/stores/settings';
@@ -77,7 +77,7 @@ vi.mock('$lib/stores/appState.svelte', () => ({
 
 // Mock the settings module at the test level
 vi.mock('$lib/stores/settings', async () => {
-  const { writable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
+  const { derived, writable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
 
   const settingsStore = writable({
     isLoading: false,
@@ -134,8 +134,13 @@ vi.mock('$lib/stores/settings', async () => {
     } as unknown as SettingsFormData,
   });
 
-  const audioSettings = writable(null);
-  const rtspSettings = writable(null);
+  const audioSettings = derived(settingsStore, $store => $store.formData.realtime?.audio);
+  const rtspSettings = derived(settingsStore, $store => $store.formData.realtime?.rtsp);
+  const realtimeSettings = derived(settingsStore, $store => $store.formData.realtime);
+  const extendedCaptureSettings = derived(
+    settingsStore,
+    $store => $store.formData.realtime?.extendedCapture
+  );
 
   const settingsActions = {
     updateSection: vi.fn((section: string, data: unknown) => {
@@ -178,6 +183,8 @@ vi.mock('$lib/stores/settings', async () => {
     settingsActions,
     hasUnsavedChanges,
     defaultQuietHoursConfig,
+    realtimeSettings,
+    extendedCaptureSettings,
   };
 });
 
@@ -196,6 +203,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    localStorage.removeItem('birdnet-audio-settings-active-tab');
 
     // Save original fetch before mocking
     originalFetch = global.fetch;
@@ -239,6 +247,14 @@ describe('AudioSettingsPage - Stream Configuration', () => {
             soundLevel: {
               enabled: false,
               interval: 60,
+            },
+            chunkUpload: {
+              enabled: false,
+              token: '',
+              path: 'chunks/inbox',
+              save: true,
+              maxBytes: 5 * 1024 * 1024,
+              maxSeconds: 15,
             },
             equalizer: {
               enabled: false,
@@ -292,6 +308,14 @@ describe('AudioSettingsPage - Stream Configuration', () => {
             soundLevel: {
               enabled: false,
               interval: 60,
+            },
+            chunkUpload: {
+              enabled: false,
+              token: '',
+              path: 'chunks/inbox',
+              save: true,
+              maxBytes: 5 * 1024 * 1024,
+              maxSeconds: 15,
             },
             equalizer: {
               enabled: false,
@@ -426,6 +450,79 @@ describe('AudioSettingsPage - Stream Configuration', () => {
 
       const modified = {
         streams: [createStreamConfig('Stream 1', 'rtsp://192.168.1.100:554/stream')],
+      };
+
+      expect(hasSettingsChanged(original, modified)).toBe(true);
+      expect(hasSettingsChanged(original, original)).toBe(false);
+    });
+  });
+
+  describe('Chunk Upload Settings', () => {
+    async function openUploadTab() {
+      render(AudioSettingsPage);
+      await fireEvent.click(screen.getByRole('tab', { name: /Upload/i }));
+    }
+
+    it('renders chunk upload defaults in the upload tab', async () => {
+      await openUploadTab();
+
+      expect(screen.getByLabelText('Enable Chunk Uploads')).not.toBeChecked();
+      expect(screen.getByLabelText('Bearer Token')).toHaveValue('');
+      expect(screen.getByLabelText('Save Uploaded Chunks')).toBeChecked();
+      expect(screen.getByLabelText('Save Path')).toHaveValue('chunks/inbox');
+      expect(screen.getByLabelText('Max Upload Size (MiB)')).toHaveValue(5);
+      expect(screen.getByLabelText('Max Chunk Duration (seconds)')).toHaveValue(15);
+    });
+
+    it('updates chunk upload enabled, save, and token settings', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+
+      await openUploadTab();
+
+      await fireEvent.click(screen.getByLabelText('Enable Chunk Uploads'));
+      await fireEvent.input(screen.getByLabelText('Bearer Token'), {
+        target: { value: 'secret-token' },
+      });
+      await fireEvent.click(screen.getByLabelText('Save Uploaded Chunks'));
+
+      await waitFor(() => {
+        const uploadSettings = get(settingsStore).formData.realtime?.audio?.chunkUpload;
+        expect(uploadSettings?.enabled).toBe(true);
+        expect(uploadSettings?.token).toBe('secret-token');
+        expect(uploadSettings?.save).toBe(false);
+      });
+    });
+
+    it('converts max upload size from MiB to bytes in stored settings', async () => {
+      const { settingsStore } = await import('$lib/stores/settings');
+
+      await openUploadTab();
+
+      await fireEvent.click(screen.getByLabelText('Enable Chunk Uploads'));
+      await fireEvent.change(screen.getByLabelText('Max Upload Size (MiB)'), {
+        target: { value: '8' },
+      });
+
+      await waitFor(() => {
+        expect(get(settingsStore).formData.realtime?.audio?.chunkUpload?.maxBytes).toBe(
+          8 * 1024 * 1024
+        );
+      });
+    });
+
+    it('detects changes in chunk upload configuration', async () => {
+      const { hasSettingsChanged } = await import('$lib/utils/settingsChanges');
+      const original = {
+        enabled: false,
+        token: '',
+        path: 'chunks/inbox',
+        save: true,
+        maxBytes: 5 * 1024 * 1024,
+        maxSeconds: 15,
+      };
+      const modified = {
+        ...original,
+        enabled: true,
       };
 
       expect(hasSettingsChanged(original, modified)).toBe(true);

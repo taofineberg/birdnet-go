@@ -130,6 +130,12 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 		return true
 	}
 
+	// Chunk uploads are authenticated with their own bearer token and are used by
+	// non-browser clients that cannot provide the UI CSRF token.
+	if c.Request().Method == http.MethodPost && strings.HasPrefix(path, "/api/v2/streams/chunks/") {
+		return true
+	}
+
 	// Skip for media and streaming endpoints only when using safe (read-only)
 	// HTTP methods. POST/PUT/DELETE/PATCH on these paths still require CSRF
 	// to prevent state-changing actions from bypassing protection.

@@ -187,7 +187,11 @@ func (c *Core) PrivateModeAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		// prefixes, and other URL normalisation differences. The method is
 		// matched explicitly so that a future handler bound to the same
 		// path with a different verb does not inherit the public exemption.
-		if c.privateModeExempt != nil && c.privateModeExempt(ctx.Request().Method, ctx.Path()) {
+		path := ctx.Path()
+		if path == "" {
+			path = ctx.Request().URL.Path
+		}
+		if c.privateModeExempt != nil && c.privateModeExempt(ctx.Request().Method, path) {
 			return next(ctx)
 		}
 		return c.AuthMiddleware(next)(ctx)

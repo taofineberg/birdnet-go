@@ -162,6 +162,7 @@ export interface AudioSettings {
   streamTransport?: string;
   export: ExportSettings;
   soundLevel: SoundLevelSettings;
+  chunkUpload: ChunkUploadSettings;
   useAudioCore?: boolean;
   equalizer: EqualizerSettings;
   quietHours?: QuietHoursConfig;
@@ -177,6 +178,15 @@ export interface SoundLevelSettings {
 // the frontend clamp and sliders stay in sync if the range ever changes.
 export const AUDIO_GAIN_MIN_DB = -40;
 export const AUDIO_GAIN_MAX_DB = 40;
+
+export interface ChunkUploadSettings {
+  enabled: boolean;
+  token: string;
+  path: string;
+  save: boolean;
+  maxBytes: number;
+  maxSeconds: number;
+}
 
 // Stream type constants
 export const StreamTypes = {
@@ -931,6 +941,14 @@ function createEmptySettings(): SettingsFormData {
         soundLevel: {
           enabled: false,
           interval: 60,
+        },
+        chunkUpload: {
+          enabled: false,
+          token: '',
+          path: 'chunks/inbox',
+          save: true,
+          maxBytes: 5 * 1024 * 1024,
+          maxSeconds: 15,
         },
         equalizer: {
           enabled: false,

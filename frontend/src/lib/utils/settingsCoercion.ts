@@ -36,6 +36,11 @@ type PartialMQTTSettings = Partial<MQTTSettings> & UnknownSettings;
 type PartialNotificationSettings = Partial<NotificationSettings> & UnknownSettings;
 type PartialFalsePositiveFilterSettings = Partial<FalsePositiveFilterSettings> & UnknownSettings;
 
+const DEFAULT_CHUNK_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const MAX_CHUNK_UPLOAD_BYTES = 100 * 1024 * 1024;
+const DEFAULT_CHUNK_UPLOAD_MAX_SECONDS = 15;
+const MAX_CHUNK_UPLOAD_MAX_SECONDS = 300;
+
 /**
  * Coerce a value to a number within specified bounds
  */
@@ -278,6 +283,32 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
   // Buffer size: reasonable limits
   if ('bufferSize' in settings) {
     coerced.bufferSize = coerceNumber(settings.bufferSize, 512, 67108864, 4096);
+  }
+
+  if (
+    'chunkUpload' in settings &&
+    settings.chunkUpload &&
+    typeof settings.chunkUpload === 'object'
+  ) {
+    const upload = settings.chunkUpload as unknown as UnknownSettings;
+    coerced.chunkUpload = {
+      enabled: coerceBoolean(upload.enabled, false),
+      token: coerceString(upload.token, ''),
+      path: coerceString(upload.path, 'chunks/inbox'),
+      save: coerceBoolean(upload.save, true),
+      maxBytes: coerceNumber(
+        upload.maxBytes,
+        1,
+        MAX_CHUNK_UPLOAD_BYTES,
+        DEFAULT_CHUNK_UPLOAD_MAX_BYTES
+      ),
+      maxSeconds: coerceNumber(
+        upload.maxSeconds,
+        1,
+        MAX_CHUNK_UPLOAD_MAX_SECONDS,
+        DEFAULT_CHUNK_UPLOAD_MAX_SECONDS
+      ),
+    };
   }
 
   // Sample rate: accept candidate rates from 48kHz to 384kHz (0 means default)

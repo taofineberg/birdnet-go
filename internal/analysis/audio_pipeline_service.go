@@ -325,6 +325,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	if ctrl := p.apiService.APIController(); ctrl != nil {
 		ctrl.SetAudioWatchdog(p.watchdog)
 		ctrl.SetSourceRestarter(p.RestartSource)
+		ctrl.SetChunkUploadIngestor(p)
 	}
 
 	// Inject suncalc into the orchestrator for bat nighttime scheduling.

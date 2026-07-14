@@ -3,6 +3,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -64,8 +65,18 @@ func isPrivateModeExempt(method, path string) bool {
 		return true
 	case method == http.MethodGet && path == hlsTokenBase+audioapi.HLSContentPath:
 		return true
+	case isChunkUploadRequest(method, path):
+		return true
 	}
 	return false
+}
+
+func isChunkUploadRequest(method, path string) bool {
+	if method != http.MethodPost {
+		return false
+	}
+	return path == apiV2Prefix+audioapi.ChunkUploadPath ||
+		strings.HasPrefix(path, apiV2Prefix+"/streams/chunks/")
 }
 
 // RestartHLSStreams stops all active HLS streams so they restart with fresh
@@ -88,4 +99,9 @@ func (c *Controller) SetAudioWatchdog(w *audiocore.LivenessWatchdog) {
 // owns the channel and calls this on *Controller, so it stays on the facade.
 func (c *Controller) SetAudioLevelChan(ch chan audiocore.AudioLevelData) {
 	c.audio.SetAudioLevelChan(ch)
+}
+
+// SetChunkUploadIngestor wires HTTP chunk uploads into the live audio pipeline.
+func (c *Controller) SetChunkUploadIngestor(ingestor audioapi.ChunkUploadIngestor) {
+	c.audio.SetChunkUploadIngestor(ingestor)
 }

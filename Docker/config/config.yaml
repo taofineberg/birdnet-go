@@ -1,0 +1,717 @@
+debug: false
+logging:
+    level: ""
+    timezone: Local
+    file: ""
+    debug_webhooks: false
+    default_level: info
+    console:
+        enabled: true
+        level: info
+    file_output:
+        enabled: true
+        path: logs/birdnet.log
+        max_size: 100
+        max_age: 30
+        max_rotated_files: 10
+        compress: true
+        level: info
+    modules:
+        access:
+            enabled: true
+            file_path: logs/access.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        analysis:
+            enabled: true
+            file_path: logs/analysis.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        analysis.processor:
+            enabled: true
+            file_path: logs/actions.log
+            level: ""
+            console_also: true
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        api:
+            enabled: true
+            file_path: logs/api.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        audio:
+            enabled: true
+            file_path: logs/audio.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        audio.ffmpeg:
+            enabled: true
+            file_path: logs/audio.log
+            level: ""
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        audiocore:
+            enabled: true
+            file_path: logs/audio.log
+            level: ""
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        auth:
+            enabled: true
+            file_path: logs/auth.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        backup:
+            enabled: true
+            file_path: logs/backup.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        birdnet:
+            enabled: true
+            file_path: logs/birdnet.log
+            level: info
+            console_also: true
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        birdweather:
+            enabled: false
+            file_path: logs/birdweather.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        config:
+            enabled: true
+            file_path: logs/config.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        datastore:
+            enabled: true
+            file_path: logs/datastore.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        diskmanager:
+            enabled: true
+            file_path: logs/diskmanager.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        ebird:
+            enabled: false
+            file_path: logs/ebird.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        events:
+            enabled: true
+            file_path: logs/events.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        imageprovider:
+            enabled: true
+            file_path: logs/imageprovider.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        monitor:
+            enabled: true
+            file_path: logs/monitor.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        mqtt:
+            enabled: false
+            file_path: logs/mqtt.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        notifications:
+            enabled: true
+            file_path: logs/notifications.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        securefs:
+            enabled: true
+            file_path: logs/securefs.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        security:
+            enabled: true
+            file_path: logs/security.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        spectrogram:
+            enabled: true
+            file_path: logs/spectrogram.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        spectrogram.prerenderer:
+            enabled: true
+            file_path: logs/spectrogram.log
+            level: ""
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        support:
+            enabled: true
+            file_path: logs/support.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        telemetry:
+            enabled: true
+            file_path: logs/telemetry.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+        weather:
+            enabled: false
+            file_path: logs/weather.log
+            level: info
+            console_also: false
+            max_size: 0
+            max_age: 0
+            max_rotated_files: 0
+    module_levels: {}
+main:
+    name: BirdNET-Go
+    timeas24h: true
+birdnet:
+    debug: false
+    sensitivity: 1
+    threshold: 0.7
+    overlap: 1.5
+    longitude: 0
+    latitude: 0
+    locationconfigured: false
+    threads: 0
+    locale: en-us
+    rangefilter:
+        debug: false
+        model: v3
+        modelpath: /home/birdnet/.config/birdnet-go/models/shared/geomodel_v3.0.2_fp16.onnx
+        labelspath: /home/birdnet/.config/birdnet-go/models/shared/geomodel_v3.0.2_labels.txt
+        threshold: 0.01
+        passunmappedspecies: false
+    usexnnpack: true
+perch:
+    modelpath: /home/birdnet/.config/birdnet-go/models/perch-v2/perch_v2.onnx
+    labelpath: /home/birdnet/.config/birdnet-go/models/perch-v2/perch_v2_labels.txt
+    threshold: 0.5
+bat:
+    threshold: 0.5
+    nighttimeonly: true
+    falsepositivefilter:
+        level: 2
+    ultrasonicfilter:
+        enabled: true
+        cvthreshold: 0.15
+        fftsize: 8192
+        hopsize: 4096
+        frequencysplithz: 20000
+bsg: {}
+models:
+    enabled:
+        - birdnet
+        - perch_v2
+lowmemory:
+    mode: auto
+taxonomySynonyms: {}
+realtime:
+    interval: 15
+    processingtime: false
+    audio:
+        sources:
+            - name: Sound Card 1
+              device: sysdefault
+              gain: 0
+              models:
+                - birdnet
+              quietHours:
+                enabled: false
+                mode: ""
+                startTime: ""
+                endTime: ""
+                startEvent: ""
+                startOffset: 0
+                endEvent: ""
+                endOffset: 0
+        ffmpegpath: /usr/bin/ffmpeg
+        soxpath: /usr/bin/sox
+        streamtransport: sse
+        export:
+            debug: false
+            enabled: true
+            path: clips/
+            type: wav
+            bitrate: 96k
+            retention:
+                debug: false
+                policy: usage
+                maxage: 30d
+                maxusage: 80%
+                minclips: 10
+                keepspectrograms: true
+                checkinterval: 15
+            length: 15
+            precapture: 3
+            gain: 0
+            normalization:
+                enabled: false
+                targetlufs: -23
+                loudnessrange: 7
+                truepeak: -2
+        soundlevel:
+            enabled: false
+            interval: 10
+            debug: false
+            debug_realtime_logging: false
+        chunkupload:
+            enabled: true
+            token: bn-chunk-7f4c0a2d9e8b41c6a0f3d2e1b5a98764
+            path: chunks/inbox
+            save: false
+            maxbytes: 5242880
+            maxseconds: 15
+        equalizer:
+            enabled: false
+            filters:
+                - type: HighPass
+                  frequency: 100
+                  q: 0.1
+                  gain: 0
+                  width: 1
+                  passes: 0
+                - type: LowPass
+                  frequency: 15000
+                  q: 0.1
+                  gain: 0
+                  width: 1
+                  passes: 0
+        quietHours:
+            enabled: false
+            mode: fixed
+            startTime: "22:00"
+            endTime: "06:00"
+            startEvent: sunset
+            startOffset: 0
+            endEvent: sunrise
+            endOffset: 0
+        watchdog:
+            checkInterval: 0
+            silenceThreshold: 0
+            maxRetries: 0
+            retryBackoff: 0
+            cooldown: 0
+            escalationTimeout: 0
+    dashboard:
+        thumbnails:
+            debug: false
+            summary: false
+            recent: true
+            imageprovider: avicommons
+            fallbackpolicy: none
+        summarylimit: 0
+        locale: en
+        spectrogram:
+            mode: auto
+            enabled: false
+            size: lg
+            raw: true
+            style: default
+            dynamicrange: "100"
+        temperatureunit: celsius
+        layout:
+            elements:
+                - id: daily-summary-0
+                  type: daily-summary
+                  enabled: true
+                  summary:
+                    summarylimit: 30
+                - id: currently-hearing-0
+                  type: currently-hearing
+                  enabled: true
+                - id: live-spectrogram-0
+                  type: live-spectrogram
+                  enabled: true
+                - id: detections-grid-0
+                  type: detections-grid
+                  enabled: true
+        defaultaudiogain: 0
+        livespectrogram: false
+    dynamicthreshold:
+        enabled: true
+        debug: false
+        trigger: 0.9
+        min: 0.2
+        validhours: 24
+    falsepositivefilter:
+        level: 0
+    log:
+        enabled: false
+        path: birdnet.txt
+    logdeduplication:
+        enabled: true
+        healthcheckintervalseconds: 60
+    birdweather:
+        enabled: false
+        debug: false
+        id: ""
+        threshold: 0.7
+        locationaccuracy: 500
+        retrysettings:
+            enabled: true
+            maxretries: 3
+            initialdelay: 30
+            maxdelay: 600
+            backoffmultiplier: 2
+    ebird:
+        enabled: false
+        apikey: ""
+        cachettl: 24
+        locale: en
+    privacyfilter:
+        debug: false
+        enabled: true
+        confidence: 0.05
+    dogbarkfilter:
+        debug: false
+        enabled: true
+        confidence: 0.1
+        remember: 5
+        species: []
+    daylightfilter:
+        debug: false
+        enabled: true
+        offset: 0
+        species:
+            - Strigiformes
+    rtsp:
+        streams: []
+        transport: tcp
+        health:
+            healthydatathreshold: 60
+            monitoringinterval: 30
+        ffmpegParameters: []
+    mqtt:
+        enabled: false
+        debug: false
+        broker: tcp://localhost:1883
+        topic: birdnet
+        username: birdnet
+        password: secret
+        retain: false
+        retrysettings:
+            enabled: true
+            maxretries: 3
+            initialdelay: 10
+            maxdelay: 300
+            backoffmultiplier: 2
+        tls:
+            enabled: false
+            insecureskipverify: false
+        homeassistant:
+            enabled: false
+            discovery_prefix: homeassistant
+            device_name: BirdNET-Go
+    telemetry:
+        enabled: false
+        listen: 0.0.0.0:8090
+    monitoring:
+        enabled: true
+        checkinterval: 60
+        cpu:
+            enabled: true
+        memory:
+            enabled: true
+        disk:
+            enabled: true
+            paths:
+                - /
+    species:
+        include: []
+        exclude: []
+        config: {}
+    weather:
+        provider: yrno
+        pollinterval: 60
+        debug: false
+        openweather:
+            enabled: false
+            apikey: ""
+            endpoint: https://api.openweathermap.org/data/2.5/weather
+            units: metric
+            language: en
+        wunderground:
+            apikey: ""
+            stationid: ""
+            endpoint: https://api.weather.com/v2/pws/observations/current
+            units: m
+    speciestracking:
+        enabled: true
+        newspecieswindowdays: 7
+        syncintervalminutes: 60
+        notificationsuppressionhours: 168
+        yearlytracking:
+            enabled: true
+            resetmonth: 1
+            resetday: 1
+            windowdays: 7
+        seasonaltracking:
+            enabled: true
+            windowdays: 7
+            seasons:
+                fall:
+                    startmonth: 9
+                    startday: 22
+                spring:
+                    startmonth: 3
+                    startday: 20
+                summer:
+                    startmonth: 6
+                    startday: 21
+                winter:
+                    startmonth: 12
+                    startday: 21
+    extendedcapture:
+        enabled: false
+        maxduration: 0
+        capturebufferseconds: 0
+        species: []
+webserver:
+    debug: false
+    enabled: true
+    port: "8080"
+    basepath: ""
+    allowembedding: false
+    livestream:
+        debug: false
+        bitrate: 128
+        samplerate: 48000
+        segmentlength: 2
+        ffmpegloglevel: warning
+    enableterminal: false
+security:
+    debug: false
+    baseurl: ""
+    host: ""
+    tlsMode: ""
+    selfSignedValidity: 1825d
+    tlsport: "8443"
+    redirecttohttps: false
+    allowsubnetbypass:
+        enabled: false
+        subnet: ""
+    trustedproxies: []
+    publicaccess:
+        liveaudio: false
+    privatemode: false
+    basicauth:
+        enabled: false
+        password: ""
+        clientid: ""
+        clientsecret: I_2wxv4BNSw7aVYJledi6tDeWxs7DeCWiy2Gnj1r-C4
+        redirecturi: ""
+        authcodeexp: 10m0s
+        accesstokenexp: 1h0m0s
+    sessionsecret: jr9mtS3sLTOxK_EOklC7Lr2TyGGUTUC80mn1WbUpYmc
+    sessionduration: 168h0m0s
+sentry:
+    enabled: false
+    debug: false
+output:
+    file: {}
+    sqlite:
+        enabled: true
+        path: birdnet.db
+    mysql:
+        enabled: false
+        username: birdnet
+        password: secret
+        database: birdnet
+        host: localhost
+        port: "3306"
+backup:
+    enabled: false
+    debug: false
+    encryption: false
+    encryption_key: ""
+    sanitize_config: false
+    retention:
+        maxage: ""
+        maxbackups: 0
+        minbackups: 0
+    targets: []
+    schedules: []
+    operationtimeouts:
+        backup: 0s
+        store: 0s
+        cleanup: 0s
+        delete: 0s
+import:
+    allowinappelevation: true
+notification:
+    push:
+        enabled: false
+        default_timeout: 30s
+        max_retries: 3
+        retry_delay: 5s
+        circuit_breaker:
+            enabled: true
+            max_failures: 5
+            timeout: 30s
+            half_open_max_requests: 1
+        health_check:
+            enabled: true
+            interval: 1m0s
+            timeout: 10s
+        rate_limiting:
+            enabled: false
+            requests_per_minute: 60
+            burst_size: 10
+        providers:
+            - type: shoutrrr
+              enabled: false
+              name: telegram-alerts
+              filter:
+                types:
+                    - error
+                    - detection
+                priorities:
+                    - critical
+                    - high
+                components: []
+                metadata_filters: {}
+              urls:
+                - telegram://<YOUR_BOT_TOKEN>@telegram?chats=<YOUR_CHAT_ID>
+              timeout: 10s
+              command: ""
+              args: []
+              environment: {}
+              input_format: ""
+              endpoints: []
+              template: ""
+            - type: script
+              enabled: false
+              name: test-script
+              filter:
+                types:
+                    - error
+                    - warning
+                    - info
+                    - detection
+                    - system
+                priorities: []
+                components: []
+                metadata_filters: {}
+              urls: []
+              timeout: 0s
+              command: scripts/your-push-script.sh
+              args:
+                - ok
+              environment: {}
+              input_format: both
+              endpoints: []
+              template: ""
+            - type: webhook
+              enabled: false
+              name: slack-webhook
+              filter:
+                types:
+                    - error
+                    - detection
+                priorities: []
+                components: []
+                metadata_filters: {}
+              urls: []
+              timeout: 0s
+              command: ""
+              args: []
+              environment: {}
+              input_format: ""
+              endpoints:
+                - url: https://hooks.slack.com/services/YOUR/WEBHOOK/PATH
+                  method: POST
+                  headers: {}
+                  timeout: 0s
+                  auth:
+                    type: bearer
+                    token: ${SLACK_WEBHOOK_TOKEN}
+                    tokenfile: ""
+                    user: ""
+                    userfile: ""
+                    pass: ""
+                    passfile: ""
+                    header: ""
+                    value: ""
+                    valuefile: ""
+              template: ""
+        min_confidence_threshold: 0
+        species_cooldown_minutes: 0
+    templates:
+        newspecies:
+            title: 'New Species: {{.CommonName}}'
+            message: 'First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}'
+alerting:
+    history_retention_days: 30

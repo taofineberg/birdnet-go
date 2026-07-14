@@ -314,6 +314,25 @@ func (r *SourceRegistry) UpdateAudioParams(sourceID string, sampleRate, bitDepth
 	return true
 }
 
+// RecordAudioData updates the source activity timestamp and cumulative PCM byte
+// count after audio has been accepted by the router.
+func (r *SourceRegistry) RecordAudioData(sourceID string, byteCount int) bool {
+	r.mu.Lock()
+	src, ok := r.sources[sourceID]
+	if !ok {
+		r.mu.Unlock()
+		return false
+	}
+	src.LastSeen = time.Now()
+	src.IsActive = true
+	src.TotalBytes += int64(byteCount)
+	snapshot := r.copySource(src)
+	r.mu.Unlock()
+
+	r.notify(SourceEvent{Type: SourceStateChanged, SourceID: sourceID, Source: snapshot})
+	return true
+}
+
 // UpdateGain updates the Gain field of the source with the given ID.
 // Returns false if the source does not exist.
 func (r *SourceRegistry) UpdateGain(sourceID string, gain float64) bool {

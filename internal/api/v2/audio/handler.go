@@ -25,6 +25,8 @@
 package audio
 
 import (
+	"context"
+
 	"github.com/labstack/echo/v4"
 
 	"github.com/tphakala/birdnet-go/internal/api/auth"
@@ -69,6 +71,12 @@ const (
 	defaultReadBufferSize = 1024
 )
 
+// ChunkUploadIngestor processes validated WAV chunk uploads through the live
+// audio pipeline.
+type ChunkUploadIngestor interface {
+	IngestAudioChunk(ctx context.Context, sourceID string, wav []byte, maxSeconds int) error
+}
+
 // Handler serves the api/v2 audio/streaming domain endpoints. It embeds the
 // shared *apicore.Core (by pointer) and additionally holds the facade-injected
 // auth service, the injectable stream-probe seam, and the live audio-level channel
@@ -89,6 +97,10 @@ type Handler struct {
 	// audioLevelChan is the live audio-level channel injected by the parent server
 	// via SetAudioLevelChan after construction.
 	audioLevelChan chan audiocore.AudioLevelData
+
+	// chunkUploadIngestor is injected by the analysis pipeline once the router,
+	// buffers, and model consumers are ready.
+	chunkUploadIngestor ChunkUploadIngestor
 }
 
 // New constructs the audio/streaming domain handler around the shared core and
@@ -110,4 +122,10 @@ func (c *Handler) isClientAuthenticated(ctx echo.Context) bool {
 		return false
 	}
 	return c.authService.IsAuthenticated(ctx)
+}
+
+// SetChunkUploadIngestor injects the processor used by the HTTP chunk upload
+// endpoint after the analysis pipeline has started.
+func (c *Handler) SetChunkUploadIngestor(ingestor ChunkUploadIngestor) {
+	c.chunkUploadIngestor = ingestor
 }

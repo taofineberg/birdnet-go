@@ -1601,6 +1601,45 @@ BirdNET-Go allows you to listen to the live audio feed directly from the web int
 - **Dependency:** This feature requires **FFmpeg** to be installed and accessible by BirdNET-Go. If FFmpeg is not found, the play button may not appear or function.
 - **Server Interaction:** Starting the live stream initiates audio encoding on the server. The stream uses a heartbeat mechanism to stay active while you are listening. Stopping the stream or closing the browser tab/window signals the server to stop the encoding process, conserving server resources.
 
+### Audio Stream Configuration
+
+BirdNET-Go supports both pull-based network streams (for example RTSP) and push-based chunk uploads.
+
+#### RTSP Stream Configuration
+
+```yaml
+realtime:
+  rtsp:
+    streams:
+      - name: "yard-cam"
+        url: "rtsp://username:password@camera-ip:554/stream"
+        transport: "tcp"
+```
+
+#### HTTP Chunk Push Configuration (POC)
+
+Use this when constrained devices send WAV chunks to BirdNET-Go instead of maintaining a continuous RTSP stream.
+
+```yaml
+realtime:
+  audio:
+    chunkupload:
+      enabled: true
+      token: "change-me"
+      path: "chunks/inbox"
+      save: true
+      maxbytes: 5242880
+      maxseconds: 15
+```
+
+Upload endpoint:
+
+```text
+POST /api/v2/streams/chunks/{source}
+Authorization: Bearer <token>
+Content-Type: audio/wav
+```
+
 ### Sound Level Monitoring
 
 BirdNET-Go includes an advanced sound level monitoring feature that provides detailed acoustic measurements of your environment in 1/3rd octave bands. This feature is particularly useful for:

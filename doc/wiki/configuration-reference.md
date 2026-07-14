@@ -173,6 +173,12 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.soundlevel.interval` | integer | measurement interval in seconds (default: 10) |
 | `realtime.audio.soundlevel.debug` | boolean | true to enable debug logging for sound level monitoring |
 | `realtime.audio.soundlevel.debug_realtime_logging` | boolean | true to log debug messages for every realtime update, false to log only at configured interval |
+| `realtime.audio.chunkupload.enabled` | boolean | enable chunk upload endpoint |
+| `realtime.audio.chunkupload.token` | string | bearer token for upload auth |
+| `realtime.audio.chunkupload.path` | string | directory where uploaded chunks are saved |
+| `realtime.audio.chunkupload.save` | boolean | persist uploaded chunks to disk |
+| `realtime.audio.chunkupload.maxbytes` | integer | per-request upload cap in bytes |
+| `realtime.audio.chunkupload.maxseconds` | integer | metadata hint for client-side chunk duration |
 | `realtime.audio.equalizer.enabled` | boolean | global flag to enable/disable equalizer filters |
 | `realtime.audio.equalizer.filters` | equalizer-filter[] | equalizer filter configuration |
 | `realtime.audio.quietHours.enabled` | boolean | true to enable quiet hours |

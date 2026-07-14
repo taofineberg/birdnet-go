@@ -16,15 +16,17 @@ const (
 	defaultChunkUploadMaxBytes = int64(5 * 1024 * 1024)
 	chunkUploadPermFile        = 0o644
 	chunkUploadPermDir         = 0o755
+
+	// ChunkUploadPath is the route pattern for bearer-token WAV chunk uploads.
+	ChunkUploadPath = "/streams/chunks/:source"
 )
 
 // RegisterChunkUploadRoutes registers the v2 chunk upload endpoint.
 func (c *Handler) RegisterChunkUploadRoutes(g *echo.Group) {
-	g.POST("/streams/chunks/:source", c.UploadAudioChunk)
+	g.POST(ChunkUploadPath, c.UploadAudioChunk)
 }
 
 // UploadAudioChunk accepts a WAV chunk upload for a logical source ID.
-// This is a fork-level proof-of-concept endpoint that persists chunks to disk.
 func (c *Handler) UploadAudioChunk(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 	if settings == nil {
@@ -72,12 +74,21 @@ func (c *Handler) UploadAudioChunk(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "unsupported audio format", http.StatusUnsupportedMediaType)
 	}
 
+	ingestor := c.chunkUploadIngestor
+	if ingestor == nil {
+		return c.HandleError(ctx, nil, "chunk upload processor unavailable", http.StatusServiceUnavailable)
+	}
+
 	if !cfg.Save {
+		if err := ingestor.IngestAudioChunk(ctx.Request().Context(), sourceID, body, cfg.MaxSeconds); err != nil {
+			return c.HandleError(ctx, err, "failed to process uploaded chunk", http.StatusInternalServerError)
+		}
 		return ctx.JSON(http.StatusAccepted, map[string]any{
-			"status": "accepted",
-			"source": sourceID,
-			"bytes":  len(body),
-			"saved":  false,
+			"status":    "accepted",
+			"source":    sourceID,
+			"bytes":     len(body),
+			"saved":     false,
+			"processed": true,
 		})
 	}
 
@@ -96,13 +107,17 @@ func (c *Handler) UploadAudioChunk(ctx echo.Context) error {
 	if err := os.WriteFile(filePath, body, chunkUploadPermFile); err != nil {
 		return c.HandleError(ctx, err, "failed to save uploaded chunk", http.StatusInternalServerError)
 	}
+	if err := ingestor.IngestAudioChunk(ctx.Request().Context(), sourceID, body, cfg.MaxSeconds); err != nil {
+		return c.HandleError(ctx, err, "failed to process uploaded chunk", http.StatusInternalServerError)
+	}
 
 	return ctx.JSON(http.StatusAccepted, map[string]any{
-		"status": "accepted",
-		"source": sourceID,
-		"bytes":  len(body),
-		"saved":  true,
-		"file":   filename,
+		"status":    "accepted",
+		"source":    sourceID,
+		"bytes":     len(body),
+		"saved":     true,
+		"processed": true,
+		"file":      filename,
 	})
 }
 

@@ -33,6 +33,9 @@ const (
 	// SourceTypeFile identifies audio files read from disk.
 	SourceTypeFile SourceType = "file"
 
+	// SourceTypeChunkUpload identifies push-based HTTP WAV chunk uploads.
+	SourceTypeChunkUpload SourceType = "chunk_upload"
+
 	// SourceTypeUnknown is used when the source type has not yet been determined.
 	SourceTypeUnknown SourceType = "unknown"
 )

@@ -393,7 +393,69 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts (settings-only)            |
 | GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)               |
 | POST   | `/streams/test`          | `TestStream`              | ✅   | Test a stream URL to verify connectivity and discover audio properties (sample rate, codec, bat compatibility) |
-| POST   | `/streams/chunks/:source`| `UploadAudioChunk`        | ❌🔐 | Upload a WAV chunk with bearer-token auth for push-audio proof of concept             |
+| POST   | `/streams/chunks/:source`| `UploadAudioChunk`        | ❌🔐 | Upload a WAV chunk with bearer-token auth and process it as an audio source           |
+
+#### Chunk Upload Examples
+
+The chunk upload endpoint receives raw WAV bytes in the request body, not JSON.
+The bearer token is configured in settings and sent by clients with the
+`Authorization` header. Accepted chunks are decoded and fed into the live audio
+pipeline as source `chunk_<source>`.
+
+**Settings JSON shape:**
+
+```json
+{
+  "realtime": {
+    "audio": {
+      "chunkUpload": {
+        "enabled": true,
+        "token": "change-me",
+        "path": "chunks/inbox",
+        "save": true,
+        "maxBytes": 5242880,
+        "maxSeconds": 15
+      }
+    }
+  }
+}
+```
+
+**Upload request:**
+
+```http
+POST /api/v2/audio/streams/chunks/yard-mic HTTP/1.1
+Authorization: Bearer change-me
+Content-Type: audio/wav
+X-Sequence: 42
+
+<raw WAV bytes>
+```
+
+**Response when `save` is enabled:**
+
+```json
+{
+  "status": "accepted",
+  "source": "yard-mic",
+  "bytes": 524288,
+  "saved": true,
+  "processed": true,
+  "file": "20260628T120000.000Z_42.wav"
+}
+```
+
+**Response when `save` is disabled:**
+
+```json
+{
+  "status": "accepted",
+  "source": "yard-mic",
+  "bytes": 524288,
+  "saved": false,
+  "processed": true
+}
+```
 
 ### Quiet Hours Status (`audio/quiet_hours.go`)
 

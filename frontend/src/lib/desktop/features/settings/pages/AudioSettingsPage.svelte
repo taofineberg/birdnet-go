@@ -5,7 +5,7 @@
   filters, sound level monitoring, export settings, and retention policies.
 
   Features:
-  - Tabbed interface: Sound Card, Streams, Processing, Export, Retention
+  - Tabbed interface: Sound Card, Streams, Upload, Processing, Export, Retention
   - Audio capture source selection (sound card/RTSP)
   - Audio filters and equalizer configuration
   - Sound level monitoring setup
@@ -32,6 +32,7 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
+  import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
   import {
     settingsStore,
@@ -41,6 +42,7 @@
     realtimeSettings,
     extendedCaptureSettings,
     type AudioSourceConfig,
+    type ChunkUploadSettings,
     type EqualizerFilterType,
     type StreamConfig,
   } from '$lib/stores/settings';
@@ -65,6 +67,7 @@
     SlidersHorizontal,
     FileAudio,
     Clock,
+    Upload,
     RefreshCw,
     Info,
   } from '@lucide/svelte';
@@ -74,6 +77,13 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.audio;
+  const BYTES_PER_MIB = 1024 * 1024;
+  const DEFAULT_CHUNK_UPLOAD_MAX_BYTES = 5 * BYTES_PER_MIB;
+  const DEFAULT_CHUNK_UPLOAD_MAX_SECONDS = 15;
+  const MIN_CHUNK_UPLOAD_MIB = 1;
+  const MAX_CHUNK_UPLOAD_MIB = 100;
+  const MIN_CHUNK_UPLOAD_SECONDS = 1;
+  const MAX_CHUNK_UPLOAD_SECONDS = 300;
 
   // Storage key for remembering last active tab
   const STORAGE_KEY = 'birdnet-audio-settings-active-tab';
@@ -125,6 +135,14 @@
           enabled: false,
           interval: 60,
         },
+        chunkUpload: {
+          enabled: false,
+          token: '',
+          path: 'chunks/inbox',
+          save: true,
+          maxBytes: DEFAULT_CHUNK_UPLOAD_MAX_BYTES,
+          maxSeconds: DEFAULT_CHUNK_UPLOAD_MAX_SECONDS,
+        },
         equalizer: {
           enabled: false,
           filters: [],
@@ -167,6 +185,14 @@
         audio: {
           ...audioBase,
           sources: audioBase.sources ?? [],
+          chunkUpload: {
+            enabled: audioBase.chunkUpload?.enabled ?? false,
+            token: audioBase.chunkUpload?.token ?? '',
+            path: audioBase.chunkUpload?.path ?? 'chunks/inbox',
+            save: audioBase.chunkUpload?.save ?? true,
+            maxBytes: audioBase.chunkUpload?.maxBytes ?? DEFAULT_CHUNK_UPLOAD_MAX_BYTES,
+            maxSeconds: audioBase.chunkUpload?.maxSeconds ?? DEFAULT_CHUNK_UPLOAD_MAX_SECONDS,
+          },
           equalizer: {
             enabled: audioBase.equalizer?.enabled ?? false,
             filters: audioBase.equalizer?.filters ?? [], // Always ensures filters is an array
@@ -195,6 +221,13 @@
     hasSettingsChanged(
       store.originalData.realtime?.rtsp?.streams,
       store.formData.realtime?.rtsp?.streams
+    )
+  );
+
+  let uploadTabHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.realtime?.audio?.chunkUpload,
+      store.formData.realtime?.audio?.chunkUpload
     )
   );
 
@@ -431,6 +464,15 @@
     keepSpectrograms: settings.audio.export?.retention?.keepSpectrograms || false,
   });
 
+  let chunkUploadMaxSizeMib = $derived(
+    Math.max(
+      MIN_CHUNK_UPLOAD_MIB,
+      Math.round(
+        (settings.audio.chunkUpload.maxBytes || DEFAULT_CHUNK_UPLOAD_MAX_BYTES) / BYTES_PER_MIB
+      )
+    )
+  );
+
   // Update handlers
   function updateAudioSources(sources: AudioSourceConfig[]) {
     for (const src of sources) {
@@ -456,6 +498,24 @@
         ...currentRtsp,
         streams,
       },
+    });
+  }
+
+  function updateChunkUploadSettings(updates: Partial<ChunkUploadSettings>) {
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...settings.audio,
+        chunkUpload: {
+          ...settings.audio.chunkUpload,
+          ...updates,
+        },
+      },
+    });
+  }
+
+  function updateChunkUploadMaxSize(sizeMib: number) {
+    updateChunkUploadSettings({
+      maxBytes: Math.round(sizeMib) * BYTES_PER_MIB,
     });
   }
 
@@ -634,6 +694,13 @@
       content: streamsTabContent,
     },
     {
+      id: 'upload',
+      label: t('settings.audio.tabs.upload'),
+      icon: Upload,
+      hasChanges: uploadTabHasChanges,
+      content: uploadTabContent,
+    },
+    {
       id: 'recording',
       label: t('settings.audio.tabs.recording'),
       icon: FileAudio,
@@ -736,6 +803,123 @@
         disabled={store.isLoading || store.isSaving}
         onUpdateStreams={updateRTSPStreams}
       />
+    </SettingsSection>
+  </div>
+{/snippet}
+
+{#snippet uploadTabContent()}
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('settings.audio.chunkUpload.title')}
+      description={t('settings.audio.chunkUpload.description')}
+      originalData={store.originalData.realtime?.audio?.chunkUpload}
+      currentData={store.formData.realtime?.audio?.chunkUpload}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={settings.audio.chunkUpload.enabled}
+          label={t('settings.audio.chunkUpload.enable')}
+          helpText={t('settings.audio.chunkUpload.enableHelp')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={enabled => updateChunkUploadSettings({ enabled })}
+        />
+
+        <fieldset
+          disabled={!settings.audio.chunkUpload.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="chunk-upload-status"
+        >
+          <span id="chunk-upload-status" class="sr-only">
+            {settings.audio.chunkUpload.enabled
+              ? t('settings.audio.chunkUpload.enable')
+              : t('settings.audio.chunkUpload.disabled')}
+          </span>
+
+          <div
+            class="space-y-4 transition-opacity duration-200"
+            class:opacity-50={!settings.audio.chunkUpload.enabled}
+          >
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <PasswordField
+                label={t('settings.audio.chunkUpload.tokenLabel')}
+                value={settings.audio.chunkUpload.token}
+                onUpdate={token => updateChunkUploadSettings({ token })}
+                placeholder={t('settings.audio.chunkUpload.tokenPlaceholder')}
+                helpText={t('settings.audio.chunkUpload.tokenHelp')}
+                disabled={!settings.audio.chunkUpload.enabled || store.isLoading || store.isSaving}
+                allowReveal={true}
+                autocomplete="off"
+              />
+
+              <Checkbox
+                checked={settings.audio.chunkUpload.save}
+                label={t('settings.audio.chunkUpload.save')}
+                helpText={t('settings.audio.chunkUpload.saveHelp')}
+                disabled={!settings.audio.chunkUpload.enabled || store.isLoading || store.isSaving}
+                onchange={save => updateChunkUploadSettings({ save })}
+              />
+
+              <TextInput
+                id="chunk-upload-path"
+                value={settings.audio.chunkUpload.path}
+                label={t('settings.audio.chunkUpload.pathLabel')}
+                placeholder="chunks/inbox"
+                helpText={t('settings.audio.chunkUpload.pathHelp')}
+                disabled={!settings.audio.chunkUpload.enabled ||
+                  !settings.audio.chunkUpload.save ||
+                  store.isLoading ||
+                  store.isSaving}
+                onchange={path => updateChunkUploadSettings({ path })}
+              />
+
+              <NumberField
+                label={t('settings.audio.chunkUpload.maxSizeLabel')}
+                value={chunkUploadMaxSizeMib}
+                onUpdate={updateChunkUploadMaxSize}
+                min={MIN_CHUNK_UPLOAD_MIB}
+                max={MAX_CHUNK_UPLOAD_MIB}
+                step={1}
+                placeholder="5"
+                helpText={t('settings.audio.chunkUpload.maxSizeHelp')}
+                disabled={!settings.audio.chunkUpload.enabled || store.isLoading || store.isSaving}
+              />
+
+              <NumberField
+                label={t('settings.audio.chunkUpload.maxSecondsLabel')}
+                value={settings.audio.chunkUpload.maxSeconds}
+                onUpdate={maxSeconds => updateChunkUploadSettings({ maxSeconds })}
+                min={MIN_CHUNK_UPLOAD_SECONDS}
+                max={MAX_CHUNK_UPLOAD_SECONDS}
+                step={1}
+                placeholder="15"
+                helpText={t('settings.audio.chunkUpload.maxSecondsHelp')}
+                disabled={!settings.audio.chunkUpload.enabled || store.isLoading || store.isSaving}
+              />
+            </div>
+
+            <SettingsNote>
+              <p class="font-semibold">
+                {t('settings.audio.chunkUpload.endpointTitle')}
+              </p>
+              <p class="text-[color:var(--color-base-content)] opacity-90 text-sm">
+                {t('settings.audio.chunkUpload.endpointDescription')}
+              </p>
+              <ul
+                class="text-[color:var(--color-base-content)] opacity-90 text-sm list-disc list-inside mt-1"
+              >
+                <li>
+                  {t('settings.audio.chunkUpload.endpoint')}
+                  <code>/api/v2/audio/streams/chunks/{'{source}'}</code>
+                </li>
+                <li>
+                  {t('settings.audio.chunkUpload.authorization')}
+                  <code>Authorization: Bearer &lt;token&gt;</code>
+                </li>
+              </ul>
+            </SettingsNote>
+          </div>
+        </fieldset>
+      </div>
     </SettingsSection>
   </div>
 {/snippet}

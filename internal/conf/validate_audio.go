@@ -416,8 +416,51 @@ func (s *AudioSettings) applyFfmpegFormatFallback() {
 // detector; only tests override it (see validate_audio_export_test.go).
 var ffmpegVersionDetector = GetFfmpegVersionFrom
 
+const (
+	minChunkUploadBytes   = int64(1 * 1024 * 1024)
+	maxChunkUploadBytes   = int64(100 * 1024 * 1024)
+	minChunkUploadSeconds = 1
+	maxChunkUploadSeconds = 300
+)
+
+func validateChunkUploadSettings(settings *ChunkUploadSettings) error {
+	if !settings.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(settings.Token) == "" {
+		return errors.Newf("chunk upload token must be configured when chunk upload is enabled").
+			Category(errors.CategoryValidation).
+			Context("validation_type", "chunk-upload-token").
+			Build()
+	}
+	if settings.MaxBytes < minChunkUploadBytes || settings.MaxBytes > maxChunkUploadBytes {
+		return errors.Newf("chunk upload maxBytes must be between %d and %d, got %d", minChunkUploadBytes, maxChunkUploadBytes, settings.MaxBytes).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "chunk-upload-max-bytes").
+			Build()
+	}
+	if settings.MaxSeconds < minChunkUploadSeconds || settings.MaxSeconds > maxChunkUploadSeconds {
+		return errors.Newf("chunk upload maxSeconds must be between %d and %d, got %d", minChunkUploadSeconds, maxChunkUploadSeconds, settings.MaxSeconds).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "chunk-upload-max-seconds").
+			Build()
+	}
+	if settings.Save && strings.TrimSpace(settings.Path) == "" {
+		return errors.Newf("chunk upload path must be configured when saving is enabled").
+			Category(errors.CategoryValidation).
+			Context("validation_type", "chunk-upload-path").
+			Build()
+	}
+	return nil
+}
+
 // validateAudioSettings validates the audio settings and sets ffmpeg and sox paths
+//
+//nolint:gocyclo // Central validator intentionally enumerates independent audio settings.
 func validateAudioSettings(settings *AudioSettings) error {
+	if err := validateChunkUploadSettings(&settings.ChunkUpload); err != nil {
+		return err
+	}
 	// Validate and determine the effective FFmpeg path
 	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
 	if ffmpegErr != nil {

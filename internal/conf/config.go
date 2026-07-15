@@ -119,9 +119,9 @@ type ChunkUploadSettings struct {
 	Enabled    bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                  // enable chunk upload endpoint
 	Token      string   `yaml:"token" json:"token" mapstructure:"token"`                        // bearer token for upload auth
 	Path       string   `yaml:"path" json:"path" mapstructure:"path"`                           // directory where uploaded chunks are saved
-	Save       bool     `yaml:"save" json:"save" mapstructure:"save"`                           // persist uploaded chunks to disk
+	Save       bool     `yaml:"save" json:"save" mapstructure:"save"`                           // persist uploaded chunks to disk (default: false)
 	MaxBytes   int64    `yaml:"maxbytes" json:"maxBytes" mapstructure:"maxbytes"`               // per-request upload cap in bytes
-	MaxSeconds int      `yaml:"maxseconds" json:"maxSeconds" mapstructure:"maxseconds"`         // metadata hint for client-side chunk duration
+	MaxSeconds int      `yaml:"maxseconds" json:"maxSeconds" mapstructure:"maxseconds"`         // maximum decoded chunk duration enforced by the server
 	Models     []string `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"` // model IDs for chunk upload sources
 }
 

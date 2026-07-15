@@ -52,6 +52,8 @@ frontend/tests/.auth/
 frontend/coverage/
 frontend/playwright-report*.zip
 frontend/report/
+Docker/config/
+.devcontainer/devcontainer-lock.json
 REFACTOR_CHANGELOG.md
 .worktrees/
 .leann/

@@ -116,6 +116,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.Audio.StreamTransport":      {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.Audio.Export":               {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.Audio.SoundLevel":           {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_sound_level"},
+	"Realtime.Audio.ChunkUpload":          {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.Audio.Equalizer":            {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.Audio.QuietHours":           {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_quiet_hours"},
 	"Realtime.Audio.Watchdog":             {categories: []hotReloadCategory{hotReloadRestart}},

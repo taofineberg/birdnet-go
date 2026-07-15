@@ -159,7 +159,7 @@
           enabled: false,
           token: '',
           path: 'chunks/inbox',
-          save: true,
+          save: false,
           maxBytes: DEFAULT_CHUNK_UPLOAD_MAX_BYTES,
           maxSeconds: DEFAULT_CHUNK_UPLOAD_MAX_SECONDS,
           models: [...DEFAULT_CHUNK_UPLOAD_MODELS],
@@ -210,7 +210,7 @@
             enabled: audioBase.chunkUpload?.enabled ?? false,
             token: audioBase.chunkUpload?.token ?? '',
             path: audioBase.chunkUpload?.path ?? 'chunks/inbox',
-            save: audioBase.chunkUpload?.save ?? true,
+            save: audioBase.chunkUpload?.save ?? false,
             maxBytes: audioBase.chunkUpload?.maxBytes ?? DEFAULT_CHUNK_UPLOAD_MAX_BYTES,
             maxSeconds: audioBase.chunkUpload?.maxSeconds ?? DEFAULT_CHUNK_UPLOAD_MAX_SECONDS,
             models: normalizeChunkUploadModels(audioBase.chunkUpload?.models),
@@ -939,7 +939,7 @@
               >
                 <li>
                   {t('settings.audio.chunkUpload.endpoint')}
-                  <code>/api/v2/audio/streams/chunks/{'{source}'}</code>
+                  <code>/api/v2/streams/chunks/{'{source}'}</code>
                 </li>
                 <li>
                   {t('settings.audio.chunkUpload.authorization')}

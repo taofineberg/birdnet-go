@@ -303,7 +303,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
       enabled: coerceBoolean(upload.enabled, false),
       token: coerceString(upload.token, ''),
       path: coerceString(upload.path, 'chunks/inbox'),
-      save: coerceBoolean(upload.save, true),
+      save: coerceBoolean(upload.save, false),
       maxBytes: coerceNumber(
         upload.maxBytes,
         1,

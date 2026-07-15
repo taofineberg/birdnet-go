@@ -121,6 +121,10 @@ type LivenessCallbacks struct {
 	// given source. Per-source granularity is required because sound card and
 	// RTSP sources have independent quiet hours schedules.
 	IsQuietHours func(sourceID string) bool
+
+	// ShouldMonitor returns false for intermittent or externally driven sources
+	// that are not expected to dispatch continuously.
+	ShouldMonitor func(sourceID string) bool
 }
 
 // livenessAction describes a callback to execute outside the mutex.
@@ -241,8 +245,13 @@ func (w *LivenessWatchdog) run(ctx context.Context) {
 // so that long-running operations like RestartSource do not block Snapshot().
 func (w *LivenessWatchdog) checkAll() {
 	activeIDs := w.router.ActiveSourceIDs()
+	monitoredIDs := make([]string, 0, len(activeIDs))
 	activeSet := make(map[string]struct{}, len(activeIDs))
 	for _, id := range activeIDs {
+		if w.callbacks.ShouldMonitor != nil && !w.callbacks.ShouldMonitor(id) {
+			continue
+		}
+		monitoredIDs = append(monitoredIDs, id)
 		activeSet[id] = struct{}{}
 	}
 
@@ -251,7 +260,7 @@ func (w *LivenessWatchdog) checkAll() {
 	w.mu.Lock()
 
 	now := time.Now()
-	for _, id := range activeIDs {
+	for _, id := range monitoredIDs {
 		if _, ok := w.sources[id]; !ok {
 			w.sources[id] = &sourceHealth{
 				state:        StateHealthy,
@@ -266,7 +275,7 @@ func (w *LivenessWatchdog) checkAll() {
 		}
 	}
 
-	for _, id := range activeIDs {
+	for _, id := range monitoredIDs {
 		h := w.sources[id]
 		if h == nil {
 			continue

@@ -1,25 +1,35 @@
 package audio
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 const (
 	defaultChunkUploadMaxBytes = int64(5 * 1024 * 1024)
 	chunkUploadPermFile        = 0o644
 	chunkUploadPermDir         = 0o755
+	maxChunkUploadSourceIDLen  = 64
 
 	// ChunkUploadPath is the route pattern for bearer-token WAV chunk uploads.
 	ChunkUploadPath = "/streams/chunks/:source"
 )
+
+var chunkUploadFileSequence atomic.Uint64
 
 // RegisterChunkUploadRoutes registers the v2 chunk upload endpoint.
 func (c *Handler) RegisterChunkUploadRoutes(g *echo.Group) {
@@ -74,15 +84,39 @@ func (c *Handler) UploadAudioChunk(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "unsupported audio format", http.StatusUnsupportedMediaType)
 	}
 
-	ingestor := c.chunkUploadIngestor
-	if ingestor == nil {
+	holder := c.chunkUploadIngestor.Load()
+	if holder == nil || holder.ingestor == nil {
 		return c.HandleError(ctx, nil, "chunk upload processor unavailable", http.StatusServiceUnavailable)
+	}
+	ingestor := holder.ingestor
+
+	var savedPath, filename string
+	if cfg.Save {
+		savedPath, _, filename, err = persistChunkUpload(cfg.Path, sourceID, ctx.Request().Header.Get("X-Sequence"), body)
+		if err != nil {
+			return c.HandleError(ctx, err, "failed to save uploaded chunk", http.StatusInternalServerError)
+		}
+	}
+
+	if err := ingestor.IngestAudioChunk(ctx.Request().Context(), sourceID, body, cfg.MaxSeconds); err != nil {
+		if savedPath != "" {
+			removeFile := os.Remove
+			if c.removeChunkUploadFile != nil {
+				removeFile = c.removeChunkUploadFile
+			}
+			if removeErr := removeFile(savedPath); removeErr != nil {
+				apicore.GetLogger().Error("failed to remove rejected chunk upload",
+					logger.String("path", savedPath),
+					logger.String("source_id", sourceID),
+					logger.String("operation", "chunk_upload_rejection_cleanup"),
+					logger.Error(removeErr))
+			}
+		}
+		status := chunkUploadIngestStatus(err)
+		return c.HandleError(ctx, err, "failed to process uploaded chunk", status)
 	}
 
 	if !cfg.Save {
-		if err := ingestor.IngestAudioChunk(ctx.Request().Context(), sourceID, body, cfg.MaxSeconds); err != nil {
-			return c.HandleError(ctx, err, "failed to process uploaded chunk", http.StatusInternalServerError)
-		}
 		return ctx.JSON(http.StatusAccepted, map[string]any{
 			"status":    "accepted",
 			"source":    sourceID,
@@ -90,25 +124,6 @@ func (c *Handler) UploadAudioChunk(ctx echo.Context) error {
 			"saved":     false,
 			"processed": true,
 		})
-	}
-
-	basePath := strings.TrimSpace(cfg.Path)
-	if basePath == "" {
-		basePath = "chunks/inbox"
-	}
-	sourceDir := filepath.Join(basePath, sourceID)
-	if err := os.MkdirAll(sourceDir, chunkUploadPermDir); err != nil {
-		return c.HandleError(ctx, err, "failed to create chunk upload directory", http.StatusInternalServerError)
-	}
-
-	sequence := sanitizeFilenameToken(ctx.Request().Header.Get("X-Sequence"), "seq")
-	filename := fmt.Sprintf("%s_%s.wav", time.Now().UTC().Format("20060102T150405.000Z"), sequence)
-	filePath := filepath.Join(sourceDir, filename)
-	if err := os.WriteFile(filePath, body, chunkUploadPermFile); err != nil {
-		return c.HandleError(ctx, err, "failed to save uploaded chunk", http.StatusInternalServerError)
-	}
-	if err := ingestor.IngestAudioChunk(ctx.Request().Context(), sourceID, body, cfg.MaxSeconds); err != nil {
-		return c.HandleError(ctx, err, "failed to process uploaded chunk", http.StatusInternalServerError)
 	}
 
 	return ctx.JSON(http.StatusAccepted, map[string]any{
@@ -121,6 +136,56 @@ func (c *Handler) UploadAudioChunk(ctx echo.Context) error {
 	})
 }
 
+func persistChunkUpload(basePath, sourceID, sequenceHeader string, body []byte) (filePath, sourceDir, filename string, err error) {
+	basePath = strings.TrimSpace(basePath)
+	if basePath == "" {
+		basePath = "chunks/inbox"
+	}
+	sourceDir = filepath.Join(basePath, sourceID)
+	if mkdirErr := os.MkdirAll(sourceDir, chunkUploadPermDir); mkdirErr != nil {
+		return "", sourceDir, "", mkdirErr
+	}
+
+	sequence := sanitizeFilenameToken(sequenceHeader, "seq")
+	filename = fmt.Sprintf("%s_%s_%d.wav",
+		time.Now().UTC().Format("20060102T150405.000000000Z"), sequence, chunkUploadFileSequence.Add(1))
+	filePath = filepath.Join(sourceDir, filename)
+	tempPath := filePath + ".part"
+	file, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, chunkUploadPermFile)
+	if err != nil {
+		return "", sourceDir, "", err
+	}
+	if _, err = file.Write(body); err != nil {
+		_ = file.Close()
+		_ = os.Remove(tempPath)
+		return "", sourceDir, "", err
+	}
+	if err = file.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return "", sourceDir, "", err
+	}
+	if err = os.Rename(tempPath, filePath); err != nil {
+		_ = os.Remove(tempPath)
+		return "", sourceDir, "", err
+	}
+	return filePath, sourceDir, filename, nil
+}
+
+func chunkUploadIngestStatus(err error) int {
+	switch {
+	case errors.Is(err, audiocore.ErrChunkUploadInvalidAudio):
+		return http.StatusUnprocessableEntity
+	case errors.Is(err, audiocore.ErrChunkUploadTooLong):
+		return http.StatusRequestEntityTooLarge
+	case errors.Is(err, audiocore.ErrChunkUploadSourceConflict):
+		return http.StatusConflict
+	case errors.Is(err, audiocore.ErrChunkUploadSourceLimit):
+		return http.StatusTooManyRequests
+	default:
+		return http.StatusServiceUnavailable
+	}
+}
+
 func looksLikeWAV(data []byte) bool {
 	if len(data) < 12 {
 		return false
@@ -129,10 +194,10 @@ func looksLikeWAV(data []byte) bool {
 }
 
 func isValidChunkSourceID(sourceID string) bool {
-	if sourceID == "" {
+	if sourceID == "" || len(sourceID) > maxChunkUploadSourceIDLen {
 		return false
 	}
-	for i := 0; i < len(sourceID); i++ {
+	for i := range len(sourceID) {
 		ch := sourceID[i]
 		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' {
 			continue
@@ -152,7 +217,9 @@ func isBearerTokenAuthorized(authHeader, expectedToken string) bool {
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 		return false
 	}
-	return strings.TrimSpace(parts[1]) == expectedToken
+	providedHash := sha256.Sum256([]byte(strings.TrimSpace(parts[1])))
+	expectedHash := sha256.Sum256([]byte(expectedToken))
+	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1
 }
 
 func sanitizeFilenameToken(raw, fallback string) string {
@@ -162,7 +229,7 @@ func sanitizeFilenameToken(raw, fallback string) string {
 	}
 	b := strings.Builder{}
 	b.Grow(len(raw))
-	for i := 0; i < len(raw); i++ {
+	for i := range len(raw) {
 		ch := raw[i]
 		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' {
 			b.WriteByte(ch)

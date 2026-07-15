@@ -125,7 +125,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.chunkupload.enabled", false)
 	viper.SetDefault("realtime.audio.chunkupload.token", "")
 	viper.SetDefault("realtime.audio.chunkupload.path", "chunks/inbox")
-	viper.SetDefault("realtime.audio.chunkupload.save", true)
+	viper.SetDefault("realtime.audio.chunkupload.save", false)
 	viper.SetDefault("realtime.audio.chunkupload.maxbytes", int64(5*1024*1024))
 	viper.SetDefault("realtime.audio.chunkupload.maxseconds", 15)
 	viper.SetDefault("realtime.audio.chunkupload.models", []string{"birdnet"})

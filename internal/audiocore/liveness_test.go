@@ -339,6 +339,21 @@ func TestLiveness_SnapshotIsEmpty(t *testing.T) {
 	assert.Empty(t, snaps, "snapshot should be empty when no sources are tracked")
 }
 
+func TestLiveness_ShouldMonitorExcludesIntermittentSource(t *testing.T) {
+	t.Parallel()
+
+	const sourceID = "chunk_source"
+	router := setupRouter(t, sourceID)
+	t.Cleanup(router.Close)
+	dispatchFrame(router, sourceID)
+
+	watchdog := NewLivenessWatchdog(DefaultLivenessConfig(), router, LivenessCallbacks{
+		ShouldMonitor: func(id string) bool { return id != sourceID },
+	})
+	watchdog.checkAll()
+	assert.Empty(t, watchdog.Snapshot())
+}
+
 func TestLiveness_RecoveryFromFailed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const src = "src-1"

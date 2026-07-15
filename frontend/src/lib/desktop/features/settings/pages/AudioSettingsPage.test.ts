@@ -86,7 +86,8 @@ vi.mock('$lib/stores/appState.svelte', () => ({
 
 // Mock the settings module at the test level
 vi.mock('$lib/stores/settings', async () => {
-  const { derived, writable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
+  const { derived, writable } =
+    await vi.importActual<typeof import('svelte/store')>('svelte/store');
 
   const settingsStore = writable({
     isLoading: false,
@@ -261,7 +262,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
               enabled: false,
               token: '',
               path: 'chunks/inbox',
-              save: true,
+              save: false,
               maxBytes: 5 * 1024 * 1024,
               maxSeconds: 15,
               models: ['birdnet'],
@@ -323,7 +324,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
               enabled: false,
               token: '',
               path: 'chunks/inbox',
-              save: true,
+              save: false,
               maxBytes: 5 * 1024 * 1024,
               maxSeconds: 15,
               models: ['birdnet'],
@@ -477,12 +478,14 @@ describe('AudioSettingsPage - Stream Configuration', () => {
     it('renders chunk upload defaults in the upload tab', async () => {
       await openUploadTab();
 
-      expect(screen.getByLabelText('Enable Chunk Uploads')).not.toBeChecked();
-      expect(screen.getByLabelText('Bearer Token')).toHaveValue('');
-      expect(screen.getByLabelText('Save Uploaded Chunks')).toBeChecked();
-      expect(screen.getByLabelText('Save Path')).toHaveValue('chunks/inbox');
-      expect(screen.getByLabelText('Max Upload Size (MiB)')).toHaveValue(5);
-      expect(screen.getByLabelText('Max Chunk Duration (seconds)')).toHaveValue(15);
+      expect(screen.getByLabelText('settings.audio.chunkUpload.enable')).not.toBeChecked();
+      expect(screen.getByLabelText('settings.audio.chunkUpload.tokenLabel')).toHaveValue('');
+      expect(screen.getByLabelText('settings.audio.chunkUpload.save')).not.toBeChecked();
+      expect(screen.getByLabelText('settings.audio.chunkUpload.pathLabel')).toHaveValue(
+        'chunks/inbox'
+      );
+      expect(screen.getByLabelText('settings.audio.chunkUpload.maxSizeLabel')).toHaveValue(5);
+      expect(screen.getByLabelText('settings.audio.chunkUpload.maxSecondsLabel')).toHaveValue(15);
       expect(screen.getByLabelText('BirdNET v2.4 (TFLite)')).toBeChecked();
     });
 
@@ -491,19 +494,19 @@ describe('AudioSettingsPage - Stream Configuration', () => {
 
       await openUploadTab();
 
-      await fireEvent.click(screen.getByLabelText('Enable Chunk Uploads'));
+      await fireEvent.click(screen.getByLabelText('settings.audio.chunkUpload.enable'));
       await waitFor(() => expect(screen.getByLabelText('Perch v2')).not.toBeDisabled());
-      await fireEvent.input(screen.getByLabelText('Bearer Token'), {
+      await fireEvent.input(screen.getByLabelText('settings.audio.chunkUpload.tokenLabel'), {
         target: { value: 'secret-token' },
       });
       await fireEvent.click(screen.getByLabelText('Perch v2'));
-      await fireEvent.click(screen.getByLabelText('Save Uploaded Chunks'));
+      await fireEvent.click(screen.getByLabelText('settings.audio.chunkUpload.save'));
 
       await waitFor(() => {
         const uploadSettings = get(settingsStore).formData.realtime?.audio?.chunkUpload;
         expect(uploadSettings?.enabled).toBe(true);
         expect(uploadSettings?.token).toBe('secret-token');
-        expect(uploadSettings?.save).toBe(false);
+        expect(uploadSettings?.save).toBe(true);
         expect(uploadSettings?.models).toEqual(['birdnet', 'perch_v2']);
       });
     });
@@ -513,13 +516,13 @@ describe('AudioSettingsPage - Stream Configuration', () => {
 
       await openUploadTab();
 
-      await fireEvent.click(screen.getByLabelText('Enable Chunk Uploads'));
-      await fireEvent.change(screen.getByLabelText('Max Upload Size (MiB)'), {
+      await fireEvent.click(screen.getByLabelText('settings.audio.chunkUpload.enable'));
+      await fireEvent.change(screen.getByLabelText('settings.audio.chunkUpload.maxSizeLabel'), {
         target: { value: '8' },
       });
 
       await waitFor(() => {
-        expect(get(settingsStore).formData.realtime?.audio?.chunkUpload?.maxBytes).toBe(
+        expect(get(settingsStore).formData.realtime?.audio?.chunkUpload.maxBytes).toBe(
           8 * 1024 * 1024
         );
       });
@@ -531,7 +534,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
         enabled: false,
         token: '',
         path: 'chunks/inbox',
-        save: true,
+        save: false,
         maxBytes: 5 * 1024 * 1024,
         maxSeconds: 15,
         models: ['birdnet'],

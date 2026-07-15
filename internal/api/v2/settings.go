@@ -1767,6 +1767,9 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	// --- MQTT ---
 	sanitized.Realtime.MQTT.Password = redact(s.Realtime.MQTT.Password)
 
+	// --- Chunk upload bearer token ---
+	sanitized.Realtime.Audio.ChunkUpload.Token = redact(s.Realtime.Audio.ChunkUpload.Token)
+
 	// --- Database ---
 	sanitized.Output.MySQL.Password = redact(s.Output.MySQL.Password)
 
@@ -1878,6 +1881,9 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// MQTT
 	restore(&current.Realtime.MQTT.Password, &incoming.Realtime.MQTT.Password)
 
+	// Chunk upload
+	restore(&current.Realtime.Audio.ChunkUpload.Token, &incoming.Realtime.Audio.ChunkUpload.Token)
+
 	// MySQL
 	restore(&current.Output.MySQL.Password, &incoming.Output.MySQL.Password)
 
@@ -1974,6 +1980,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 	check(s.Security.GithubAuth.ClientSecret, "security.githubAuth.clientSecret")
 	check(s.Security.MicrosoftAuth.ClientSecret, "security.microsoftAuth.clientSecret")
 	check(s.Realtime.MQTT.Password, "realtime.mqtt.password")
+	check(s.Realtime.Audio.ChunkUpload.Token, "realtime.audio.chunkUpload.token")
 	check(s.Output.MySQL.Password, "output.mysql.password")
 	check(s.Realtime.Weather.OpenWeather.APIKey, "realtime.weather.openWeather.apiKey")
 	check(s.Realtime.Weather.Wunderground.APIKey, "realtime.weather.wunderground.apiKey")
@@ -2041,6 +2048,7 @@ func clearRedactedSentinels(s *conf.Settings) {
 	clearField(&s.Security.GithubAuth.ClientSecret)
 	clearField(&s.Security.MicrosoftAuth.ClientSecret)
 	clearField(&s.Realtime.MQTT.Password)
+	clearField(&s.Realtime.Audio.ChunkUpload.Token)
 	clearField(&s.Output.MySQL.Password)
 	clearField(&s.Realtime.Weather.OpenWeather.APIKey)
 	clearField(&s.Realtime.Weather.Wunderground.APIKey)

@@ -947,7 +947,7 @@ function createEmptySettings(): SettingsFormData {
           enabled: false,
           token: '',
           path: 'chunks/inbox',
-          save: true,
+          save: false,
           maxBytes: 5 * 1024 * 1024,
           maxSeconds: 15,
           models: ['birdnet'],

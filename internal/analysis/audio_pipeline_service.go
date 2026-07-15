@@ -83,8 +83,9 @@ type AudioPipelineService struct {
 	// by removeAllSoundLevelConsumers.
 	soundLevelConsumers map[string]string
 
-	chunkUploadMu     sync.Mutex
-	chunkUploadPacers map[string]*chunkUploadPacer
+	chunkUploadMu       sync.Mutex
+	chunkUploadPacers   map[string]*chunkUploadPacer
+	chunkUploadStopping bool
 }
 
 // NewAudioPipelineService creates a new AudioPipelineService with the given dependencies.
@@ -316,6 +317,10 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			}
 			return p.quietHoursScheduler.IsStreamSuppressed(sourceID)
 		},
+		ShouldMonitor: func(sourceID string) bool {
+			src, ok := p.engine.Registry().Get(sourceID)
+			return !ok || src.Type != audiocore.SourceTypeChunkUpload
+		},
 	}
 	p.watchdog = audiocore.NewLivenessWatchdog(
 		buildLivenessConfig(settings.Realtime.Audio.Watchdog),
@@ -412,6 +417,11 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 
 	log.Info("initiating audio pipeline shutdown",
 		logger.String("operation", "graceful_shutdown"))
+
+	// Prevent new per-source chunk pacers from being added before Wait begins.
+	p.chunkUploadMu.Lock()
+	p.chunkUploadStopping = true
+	p.chunkUploadMu.Unlock()
 
 	// Stop control monitor.
 	if p.ctrlMonitor != nil {
@@ -1100,6 +1110,8 @@ func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigI
 // desired config from settings. Only sources that were added, removed, or
 // changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact.
+//
+//nolint:gocognit // Reconciliation intentionally keeps all source add/remove/update decisions together.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
 	p.sourcesMu.Lock()
 	defer p.sourcesMu.Unlock()
@@ -1239,7 +1251,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	}
 	var removedCount int
 	for _, src := range registry.List() {
-		if keepIDs[src.ID] {
+		if keepIDs[src.ID] || src.Type == audiocore.SourceTypeChunkUpload {
 			continue
 		}
 		removedCount++

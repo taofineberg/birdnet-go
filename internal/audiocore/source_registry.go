@@ -326,10 +326,7 @@ func (r *SourceRegistry) RecordAudioData(sourceID string, byteCount int) bool {
 	src.LastSeen = time.Now()
 	src.IsActive = true
 	src.TotalBytes += int64(byteCount)
-	snapshot := r.copySource(src)
 	r.mu.Unlock()
-
-	r.notify(SourceEvent{Type: SourceStateChanged, SourceID: sourceID, Source: snapshot})
 	return true
 }
 

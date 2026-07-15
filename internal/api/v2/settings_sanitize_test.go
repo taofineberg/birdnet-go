@@ -39,6 +39,7 @@ func settingsWithSecrets(t *testing.T) *conf.Settings {
 	s.Realtime.MQTT.Broker = "mqtt.local"
 	s.Realtime.MQTT.Username = "mqtt-user"
 	s.Realtime.MQTT.Password = "mqtt-password"
+	s.Realtime.Audio.ChunkUpload.Token = "chunk-upload-secret"
 
 	// MySQL
 	s.Output.MySQL.Enabled = true
@@ -131,6 +132,7 @@ func TestSanitizeSettingsForAPI_RedactsAllSecrets(t *testing.T) {
 
 	// --- MQTT ---
 	assert.Equal(t, redactedValue, sanitized.Realtime.MQTT.Password, "mqtt.password must be redacted")
+	assert.Equal(t, redactedValue, sanitized.Realtime.Audio.ChunkUpload.Token, "chunkUpload.token must be redacted")
 	assert.Equal(t, "mqtt-user", sanitized.Realtime.MQTT.Username, "mqtt.username should be preserved")
 	assert.Equal(t, "mqtt.local", sanitized.Realtime.MQTT.Broker, "mqtt.broker should be preserved")
 
@@ -271,6 +273,7 @@ func TestRestoreRedactedSecrets_PreservesRealValues(t *testing.T) {
 	incoming.Security.BasicAuth.Password = redactedValue
 	incoming.Security.GoogleAuth.ClientSecret = redactedValue
 	incoming.Realtime.MQTT.Password = redactedValue
+	incoming.Realtime.Audio.ChunkUpload.Token = redactedValue
 	incoming.Output.MySQL.Password = redactedValue
 	incoming.Realtime.Weather.OpenWeather.APIKey = redactedValue
 	incoming.Realtime.EBird.APIKey = redactedValue
@@ -286,6 +289,7 @@ func TestRestoreRedactedSecrets_PreservesRealValues(t *testing.T) {
 	assert.Equal(t, "admin-password", incoming.Security.BasicAuth.Password)
 	assert.Equal(t, "google-secret", incoming.Security.GoogleAuth.ClientSecret)
 	assert.Equal(t, "mqtt-password", incoming.Realtime.MQTT.Password)
+	assert.Equal(t, "chunk-upload-secret", incoming.Realtime.Audio.ChunkUpload.Token)
 	assert.Equal(t, "db-password", incoming.Output.MySQL.Password)
 	assert.Equal(t, "ow-api-key-123", incoming.Realtime.Weather.OpenWeather.APIKey)
 	assert.Equal(t, "ebird-api-key-789", incoming.Realtime.EBird.APIKey)

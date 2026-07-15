@@ -176,9 +176,9 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.chunkupload.enabled` | boolean | enable chunk upload endpoint |
 | `realtime.audio.chunkupload.token` | string | bearer token for upload auth |
 | `realtime.audio.chunkupload.path` | string | directory where uploaded chunks are saved |
-| `realtime.audio.chunkupload.save` | boolean | persist uploaded chunks to disk |
+| `realtime.audio.chunkupload.save` | boolean | persist uploaded chunks to disk (default: false) |
 | `realtime.audio.chunkupload.maxbytes` | integer | per-request upload cap in bytes |
-| `realtime.audio.chunkupload.maxseconds` | integer | metadata hint for client-side chunk duration |
+| `realtime.audio.chunkupload.maxseconds` | integer | maximum decoded chunk duration enforced by the server |
 | `realtime.audio.chunkupload.models` | string[] | model IDs for chunk upload sources |
 | `realtime.audio.equalizer.enabled` | boolean | global flag to enable/disable equalizer filters |
 | `realtime.audio.equalizer.filters` | equalizer-filter[] | equalizer filter configuration |
@@ -465,3 +465,4 @@ AlertSettings configures the alerting rules engine.
 | Setting | Type | Description |
 |---------|------|-------------|
 | `alerting.history_retention_days` | integer | Days to retain alert history (0 = unlimited) |
+

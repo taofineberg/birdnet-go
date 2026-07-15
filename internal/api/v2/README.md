@@ -425,7 +425,7 @@ pipeline as source `chunk_<source>`.
 **Upload request:**
 
 ```http
-POST /api/v2/audio/streams/chunks/yard-mic HTTP/1.1
+POST /api/v2/streams/chunks/yard-mic HTTP/1.1
 Authorization: Bearer change-me
 Content-Type: audio/wav
 X-Sequence: 42

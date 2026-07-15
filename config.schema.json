@@ -550,7 +550,7 @@
         },
         "save": {
           "type": "boolean",
-          "description": "persist uploaded chunks to disk"
+          "description": "persist uploaded chunks to disk (default: false)"
         },
         "maxbytes": {
           "type": "integer",
@@ -558,7 +558,7 @@
         },
         "maxseconds": {
           "type": "integer",
-          "description": "metadata hint for client-side chunk duration"
+          "description": "maximum decoded chunk duration enforced by the server"
         },
         "models": {
           "items": {

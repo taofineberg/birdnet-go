@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"sync"
@@ -20,6 +21,8 @@ const (
 	chunkUploadScheme       = "chunk-upload://"
 	chunkUploadFrameSize    = conf.SampleRate * conf.NumChannels * conf.BytesPerSample / 10
 	chunkUploadPacerQueue   = 8
+	maxChunkUploadSources   = 32
+	chunkUploadIdleTimeout  = 10 * time.Minute
 )
 
 type chunkUploadPCM struct {
@@ -29,15 +32,33 @@ type chunkUploadPCM struct {
 }
 
 type chunkUploadPacer struct {
-	ch        chan chunkUploadPCM
-	closeOnce sync.Once
+	ch chan chunkUploadPCM
+
+	mu           sync.Mutex
+	lastActivity time.Time
+	processing   bool
+	accepting    bool
+	stop         chan struct{}
+	stopOnce     sync.Once
 }
 
 // IngestAudioChunk decodes an uploaded WAV chunk and feeds it into the same
 // router/consumer path used by live audio sources.
 func (p *AudioPipelineService) IngestAudioChunk(ctx context.Context, sourceID string, wav []byte, maxSeconds int) error {
 	if p == nil || p.engine == nil || p.bufferMgr == nil || p.apiService == nil {
-		return fmt.Errorf("chunk upload pipeline is not ready")
+		return fmt.Errorf("%w: pipeline is not ready", audiocore.ErrChunkUploadUnavailable)
+	}
+
+	maxPCMBytes := 0
+	if maxSeconds > 0 {
+		maxPCMBytes = maxSeconds * conf.SampleRate * conf.NumChannels * conf.BytesPerSample
+	}
+	pcm, err := decodeChunkUploadWAV(ctx, conf.Setting().Realtime.Audio.FfmpegPath, wav, maxPCMBytes)
+	if err != nil {
+		return err
+	}
+	if len(pcm) == 0 {
+		return fmt.Errorf("%w: decoded chunk is empty", audiocore.ErrChunkUploadInvalidAudio)
 	}
 
 	runtimeID := chunkUploadRuntimeSourceID(sourceID)
@@ -46,22 +67,7 @@ func (p *AudioPipelineService) IngestAudioChunk(ctx context.Context, sourceID st
 		return err
 	}
 
-	pcm, err := decodeChunkUploadWAV(ctx, conf.Setting().Realtime.Audio.FfmpegPath, wav)
-	if err != nil {
-		return err
-	}
-	if len(pcm) == 0 {
-		return fmt.Errorf("decoded chunk is empty")
-	}
-	if maxSeconds > 0 {
-		maxPCMBytes := maxSeconds * conf.SampleRate * conf.NumChannels * conf.BytesPerSample
-		if len(pcm) > maxPCMBytes {
-			return fmt.Errorf("decoded chunk duration exceeds maxSeconds: %d > %d", decodedPCMSeconds(len(pcm)), maxSeconds)
-		}
-	}
-
-	p.enqueueChunkPCM(runtimeID, displayName, pcm)
-	return nil
+	return p.enqueueChunkPCM(ctx, runtimeID, displayName, pcm)
 }
 
 func (p *AudioPipelineService) ensureChunkUploadSource(runtimeID, displayName, connectionString string) error {
@@ -71,11 +77,20 @@ func (p *AudioPipelineService) ensureChunkUploadSource(runtimeID, displayName, c
 	sourceIDs := []string{runtimeID}
 	sourceModelMap := map[string][]string{runtimeID: chunkUploadModelIDs()}
 
-	if _, ok := p.engine.Registry().Get(runtimeID); ok {
+	if src, ok := p.engine.Registry().Get(runtimeID); ok {
+		existingConnection, _ := p.engine.Registry().ConnectionStringByID(runtimeID)
+		if src.Type != audiocore.SourceTypeChunkUpload || existingConnection != connectionString {
+			return fmt.Errorf("%w: %s", audiocore.ErrChunkUploadSourceConflict, runtimeID)
+		}
 		if p.chunkUploadModelsChanged(runtimeID, sourceModelMap[runtimeID]) {
 			p.reconfigureChunkUploadSource(runtimeID, sourceIDs, sourceModelMap)
 		}
 		return nil
+	}
+	if chunkUploadSourceCount(p.engine.Registry().List()) >= maxChunkUploadSources {
+		if !p.evictIdleChunkUploadSource(time.Now()) {
+			return fmt.Errorf("%w: maximum is %d", audiocore.ErrChunkUploadSourceLimit, maxChunkUploadSources)
+		}
 	}
 
 	cfg := &audiocore.SourceConfig{
@@ -90,7 +105,7 @@ func (p *AudioPipelineService) ensureChunkUploadSource(runtimeID, displayName, c
 		SourceChannels:   conf.NumChannels,
 	}
 	if err := p.engine.AddSource(cfg); err != nil {
-		return fmt.Errorf("add chunk upload source: %w", err)
+		return fmt.Errorf("%w: add source: %w", audiocore.ErrChunkUploadUnavailable, err)
 	}
 	_ = p.engine.Registry().UpdateState(runtimeID, audiocore.SourceRunning)
 
@@ -99,7 +114,13 @@ func (p *AudioPipelineService) ensureChunkUploadSource(runtimeID, displayName, c
 
 	sourceMonitorConfigs := p.buildMonitorConfigs(sourceModelMap, sourceIDs)
 	if err := p.bufferMgr.AddMonitors(runtimeID, sourceMonitorConfigs[runtimeID]); err != nil {
-		return fmt.Errorf("add chunk upload monitors: %w", err)
+		p.untrackSoundLevelConsumer(runtimeID)
+		if removeErr := p.engine.RemoveSource(runtimeID); removeErr != nil {
+			audiocore.GetLogger().Warn("failed to roll back chunk upload source",
+				logger.String("source_id", runtimeID),
+				logger.Error(removeErr))
+		}
+		return fmt.Errorf("%w: add monitors: %w", audiocore.ErrChunkUploadUnavailable, err)
 	}
 
 	audiocore.GetLogger().Info("registered chunk upload audio source",
@@ -142,18 +163,25 @@ func (p *AudioPipelineService) reconfigureChunkUploadSource(sourceID string, sou
 	}
 }
 
-func (p *AudioPipelineService) enqueueChunkPCM(sourceID, displayName string, pcm []byte) {
+func (p *AudioPipelineService) enqueueChunkPCM(ctx context.Context, sourceID, displayName string, pcm []byte) error {
 	pacer := p.chunkUploadPacer(sourceID)
-	pacer.ch <- chunkUploadPCM{
+	if pacer == nil {
+		return fmt.Errorf("%w: pipeline is stopping", audiocore.ErrChunkUploadUnavailable)
+	}
+	item := chunkUploadPCM{
 		sourceID:    sourceID,
 		displayName: displayName,
 		pcm:         pcm,
 	}
+	return pacer.enqueue(ctx, p.done, item)
 }
 
 func (p *AudioPipelineService) chunkUploadPacer(sourceID string) *chunkUploadPacer {
 	p.chunkUploadMu.Lock()
 	defer p.chunkUploadMu.Unlock()
+	if p.chunkUploadStopping {
+		return nil
+	}
 
 	if p.chunkUploadPacers == nil {
 		p.chunkUploadPacers = make(map[string]*chunkUploadPacer)
@@ -162,7 +190,12 @@ func (p *AudioPipelineService) chunkUploadPacer(sourceID string) *chunkUploadPac
 		return pacer
 	}
 
-	pacer := &chunkUploadPacer{ch: make(chan chunkUploadPCM, chunkUploadPacerQueue)}
+	pacer := &chunkUploadPacer{
+		ch:           make(chan chunkUploadPCM, chunkUploadPacerQueue),
+		lastActivity: time.Now(),
+		accepting:    true,
+		stop:         make(chan struct{}),
+	}
 	p.chunkUploadPacers[sourceID] = pacer
 	p.wg.Add(1)
 	go p.runChunkUploadPacer(pacer)
@@ -175,12 +208,87 @@ func (p *AudioPipelineService) runChunkUploadPacer(pacer *chunkUploadPacer) {
 	for {
 		select {
 		case <-p.done:
-			pacer.closeOnce.Do(func() { close(pacer.ch) })
+			return
+		case <-pacer.stop:
 			return
 		case item := <-pacer.ch:
+			pacer.setProcessing(true)
 			p.dispatchChunkPCMRealtime(item.sourceID, item.displayName, item.pcm)
+			pacer.setProcessing(false)
 		}
 	}
+}
+
+func (pacer *chunkUploadPacer) enqueue(ctx context.Context, done <-chan struct{}, item chunkUploadPCM) error {
+	pacer.mu.Lock()
+	defer pacer.mu.Unlock()
+	if !pacer.accepting {
+		return fmt.Errorf("%w: source is being retired", audiocore.ErrChunkUploadUnavailable)
+	}
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("%w: %w", audiocore.ErrChunkUploadUnavailable, ctx.Err())
+	case <-done:
+		return fmt.Errorf("%w: pipeline is stopping", audiocore.ErrChunkUploadUnavailable)
+	case pacer.ch <- item:
+		pacer.lastActivity = time.Now()
+		return nil
+	default:
+		return fmt.Errorf("%w: source %s", audiocore.ErrChunkUploadQueueFull, item.sourceID)
+	}
+}
+
+func (pacer *chunkUploadPacer) setProcessing(processing bool) {
+	pacer.mu.Lock()
+	pacer.processing = processing
+	pacer.lastActivity = time.Now()
+	pacer.mu.Unlock()
+}
+
+func (pacer *chunkUploadPacer) retireIfIdle(now time.Time) bool {
+	pacer.mu.Lock()
+	defer pacer.mu.Unlock()
+	if !pacer.accepting || pacer.processing || len(pacer.ch) != 0 || now.Sub(pacer.lastActivity) < chunkUploadIdleTimeout {
+		return false
+	}
+	pacer.accepting = false
+	pacer.stopOnce.Do(func() { close(pacer.stop) })
+	return true
+}
+
+// evictIdleChunkUploadSource frees one inactive dynamic source when the cap is
+// reached. sourcesMu must be held by the caller so source teardown cannot race
+// static-source reconciliation.
+func (p *AudioPipelineService) evictIdleChunkUploadSource(now time.Time) bool {
+	p.chunkUploadMu.Lock()
+	var retiredID string
+	for sourceID, pacer := range p.chunkUploadPacers {
+		if pacer.retireIfIdle(now) {
+			retiredID = sourceID
+			delete(p.chunkUploadPacers, sourceID)
+			break
+		}
+	}
+	p.chunkUploadMu.Unlock()
+	if retiredID == "" {
+		return false
+	}
+
+	RemoveOverrunTrackers(retiredID)
+	p.untrackSoundLevelConsumer(retiredID)
+	if p.bufferMgr != nil {
+		_ = p.bufferMgr.RemoveMonitor(retiredID)
+	}
+	if err := p.engine.RemoveSource(retiredID); err != nil {
+		audiocore.GetLogger().Warn("failed to remove idle chunk upload source",
+			logger.String("source_id", retiredID),
+			logger.Error(err))
+		return false
+	}
+	audiocore.GetLogger().Info("removed idle chunk upload source",
+		logger.String("source_id", retiredID),
+		logger.String("operation", "chunk_upload_idle_evict"))
+	return true
 }
 
 func chunkUploadModelIDs() []string {
@@ -202,9 +310,9 @@ func chunkUploadModelIDs() []string {
 	return ids
 }
 
-func decodeChunkUploadWAV(ctx context.Context, ffmpegPath string, wav []byte) ([]byte, error) {
+func decodeChunkUploadWAV(ctx context.Context, ffmpegPath string, wav []byte, maxPCMBytes int) ([]byte, error) {
 	if err := ffmpeg.ValidateFFmpegPath(ffmpegPath); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", audiocore.ErrChunkUploadUnavailable, err)
 	}
 
 	args := []string{
@@ -219,14 +327,54 @@ func decodeChunkUploadWAV(ctx context.Context, ffmpegPath string, wav []byte) ([
 	}
 	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath validated by ValidateFFmpegPath, args built internally
 	cmd.Stdin = bytes.NewReader(wav)
-	var stdout bytes.Buffer
+	stdout := newLimitedPCMBuffer(maxPCMBytes)
 	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	cmd.Stdout = stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("decode uploaded WAV: %w: %s", err, strings.TrimSpace(stderr.String()))
+		if stdout.exceeded {
+			return nil, fmt.Errorf("%w: maximum PCM size is %d bytes", audiocore.ErrChunkUploadTooLong, maxPCMBytes)
+		}
+		return nil, fmt.Errorf("%w: decode uploaded WAV: %w: %s", audiocore.ErrChunkUploadInvalidAudio, err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.Bytes(), nil
+}
+
+type limitedPCMBuffer struct {
+	bytes.Buffer
+	limit    int
+	exceeded bool
+}
+
+func newLimitedPCMBuffer(limit int) *limitedPCMBuffer {
+	return &limitedPCMBuffer{limit: limit}
+}
+
+func (b *limitedPCMBuffer) Write(p []byte) (int, error) {
+	if b.limit <= 0 {
+		return b.Buffer.Write(p)
+	}
+	remaining := b.limit - b.Len()
+	if remaining <= 0 {
+		b.exceeded = true
+		return 0, fmt.Errorf("decoded PCM limit exceeded")
+	}
+	if len(p) > remaining {
+		b.exceeded = true
+		written, _ := b.Buffer.Write(p[:remaining])
+		return written, io.ErrShortWrite
+	}
+	return b.Buffer.Write(p)
+}
+
+func chunkUploadSourceCount(sources []*audiocore.AudioSource) int {
+	count := 0
+	for _, source := range sources {
+		if source != nil && source.Type == audiocore.SourceTypeChunkUpload {
+			count++
+		}
+	}
+	return count
 }
 
 func (p *AudioPipelineService) dispatchChunkPCMRealtime(sourceID, displayName string, pcm []byte) {
@@ -283,12 +431,4 @@ func chunkUploadRuntimeSourceID(sourceID string) string {
 
 func chunkUploadDisplayName(sourceID string) string {
 	return "Chunk Upload: " + sourceID
-}
-
-func decodedPCMSeconds(byteCount int) int {
-	bytesPerSecond := conf.SampleRate * conf.NumChannels * conf.BytesPerSample
-	if bytesPerSecond <= 0 {
-		return 0
-	}
-	return (byteCount + bytesPerSecond - 1) / bytesPerSecond
 }

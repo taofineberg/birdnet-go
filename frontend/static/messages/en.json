@@ -3630,7 +3630,7 @@
         "maxSizeLabel": "Max Upload Size (MiB)",
         "maxSizeHelp": "Maximum request body size for one WAV chunk. Range: 1-100 MiB.",
         "maxSecondsLabel": "Max Chunk Duration (seconds)",
-        "maxSecondsHelp": "Metadata hint for clients that controls the intended chunk duration. Range: 1-300 seconds.",
+        "maxSecondsHelp": "Maximum decoded duration accepted by the server for one chunk. Range: 1-300 seconds.",
         "endpointTitle": "Upload Endpoint",
         "endpointDescription": "Send raw WAV bytes to the endpoint. The request body is audio data, not JSON.",
         "endpoint": "Endpoint:",

@@ -5,5 +5,9 @@ Dockerfile
 .github
 .task
 .claude
+.cache
 node_modules
 frontend/dist
+Docker/config
+Docker/data
+logs

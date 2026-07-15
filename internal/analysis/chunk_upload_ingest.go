@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -419,7 +420,7 @@ func chunkUploadModelIDs() []string {
 // their analysis monitors.
 func (p *AudioPipelineService) includeChunkUploadMonitorState(sourceModelMap map[string][]string, sourceIDs []string) []string {
 	seen := make(map[string]struct{}, len(sourceIDs))
-	result := append([]string(nil), sourceIDs...)
+	result := slices.Clone(sourceIDs)
 	for _, sourceID := range sourceIDs {
 		seen[sourceID] = struct{}{}
 	}

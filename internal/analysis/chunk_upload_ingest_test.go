@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	enginepkg "github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
@@ -176,4 +177,53 @@ func TestChunkUploadShutdownRejectsLateEnqueueAndDrainsQueuedPCM(t *testing.T) {
 	_, stillTracked := pipeline.chunkUploadPacers["chunk_test"]
 	pipeline.chunkUploadMu.Unlock()
 	assert.False(t, stillTracked)
+}
+
+func TestIncludeChunkUploadMonitorStatePreservesDynamicSources(t *testing.T) {
+	previous := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(previous) })
+	settings := conftest.GetTestSettings()
+	settings.Realtime.Audio.ChunkUpload.Models = []string{"birdnet", "perch_v2"}
+	conftest.SetTestSettings(settings)
+
+	eng := enginepkg.New(t.Context(), &enginepkg.Config{}, nil)
+	_, err := eng.Registry().Register(&audiocore.SourceConfig{
+		ID:               "chunk_yard",
+		DisplayName:      "Chunk Upload: yard",
+		Type:             audiocore.SourceTypeChunkUpload,
+		ConnectionString: "chunk-upload://yard",
+		SampleRate:       conf.SampleRate,
+		BitDepth:         conf.BitDepth,
+		Channels:         conf.NumChannels,
+	})
+	require.NoError(t, err)
+
+	pipeline := &AudioPipelineService{engine: eng}
+	models := map[string][]string{"static": {"birdnet"}}
+	ids := pipeline.includeChunkUploadMonitorState(models, []string{"static"})
+
+	assert.ElementsMatch(t, []string{"static", "chunk_yard"}, ids)
+	assert.Equal(t, []string{"birdnet", "perch_v2"}, models["chunk_yard"])
+}
+
+func TestRemoveAllSourcesPreservesChunkUploadSources(t *testing.T) {
+	t.Parallel()
+
+	eng := enginepkg.New(t.Context(), &enginepkg.Config{}, nil)
+	_, err := eng.Registry().Register(&audiocore.SourceConfig{
+		ID:               "chunk_yard",
+		DisplayName:      "Chunk Upload: yard",
+		Type:             audiocore.SourceTypeChunkUpload,
+		ConnectionString: "chunk-upload://yard",
+		SampleRate:       conf.SampleRate,
+		BitDepth:         conf.BitDepth,
+		Channels:         conf.NumChannels,
+	})
+	require.NoError(t, err)
+
+	pipeline := &AudioPipelineService{engine: eng}
+	pipeline.removeAllSources("test_restart")
+
+	_, exists := eng.Registry().Get("chunk_yard")
+	assert.True(t, exists)
 }

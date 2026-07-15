@@ -65,6 +65,53 @@ func TestMonitorKey_UsableAsMapKey(t *testing.T) {
 	assert.Equal(t, 1, m[k3], "same key should retrieve same value")
 }
 
+func TestCleanupMonitorGenerationPreservesReplacement(t *testing.T) {
+	t.Parallel()
+
+	manager := &BufferManager{}
+	key := monitorKey{sourceID: "mic1", modelID: "birdnet-v2.4"}
+	oldGeneration := make(chan struct{})
+	replacement := make(chan struct{})
+	manager.monitors.Store(key, replacement)
+
+	manager.cleanupMonitorGeneration(key, oldGeneration, key.sourceID)
+
+	actual, exists := manager.monitors.Load(key)
+	require.True(t, exists)
+	actualChannel, ok := actual.(chan struct{})
+	require.True(t, ok)
+	assert.Equal(t, replacement, actualChannel)
+	select {
+	case <-replacement:
+		t.Fatal("replacement monitor was closed by stale generation cleanup")
+	default:
+	}
+}
+
+func TestRemoveMonitorGenerationPreservesReplacement(t *testing.T) {
+	t.Parallel()
+
+	manager := &BufferManager{}
+	key := monitorKey{sourceID: "mic1", modelID: "birdnet-v2.4"}
+	oldGeneration := make(chan struct{})
+	replacement := make(chan struct{})
+	manager.monitors.Store(key, replacement)
+
+	removed := manager.removeMonitorGeneration(key, oldGeneration, key.sourceID, key.modelID)
+
+	assert.False(t, removed)
+	actual, exists := manager.monitors.Load(key)
+	require.True(t, exists)
+	actualChannel, ok := actual.(chan struct{})
+	require.True(t, ok)
+	assert.Equal(t, replacement, actualChannel)
+	select {
+	case <-replacement:
+		t.Fatal("replacement monitor was closed by stale removal")
+	default:
+	}
+}
+
 func TestBuildMonitorConfig(t *testing.T) {
 	t.Parallel()
 

@@ -225,17 +225,7 @@ func (m *BufferManager) AddMonitors(source string, models []monitorConfig) error
 						logger.String("component", "analysis.buffer"))
 				}
 
-				// Remove only this goroutine's generation. A replacement monitor may
-				// already occupy the same key after a model reconfiguration.
-				if m.monitors.CompareAndDelete(key, monitorQuit) {
-					select {
-					case <-monitorQuit:
-						// Normal shutdown - quit channel was closed.
-					default:
-						// Unexpected exit - safely close this generation only.
-						m.safeCloseChannel(monitorQuit, source)
-					}
-				}
+				m.cleanupMonitorGeneration(key, monitorQuit, source)
 			}()
 
 			// Run the monitor using audiocore buffer manager
@@ -244,6 +234,21 @@ func (m *BufferManager) AddMonitors(source string, models []monitorConfig) error
 	}
 
 	return nil
+}
+
+func (m *BufferManager) cleanupMonitorGeneration(key monitorKey, monitorQuit chan struct{}, source string) {
+	// Remove only this goroutine's generation. A replacement monitor may
+	// already occupy the same key after a model reconfiguration.
+	if !m.monitors.CompareAndDelete(key, monitorQuit) {
+		return
+	}
+	select {
+	case <-monitorQuit:
+		// Normal shutdown - quit channel was closed.
+	default:
+		// Unexpected exit - safely close this generation only.
+		m.safeCloseChannel(monitorQuit, source)
+	}
 }
 
 // RemoveMonitor safely stops and removes all monitors for a source.
@@ -266,23 +271,28 @@ func (m *BufferManager) RemoveMonitor(source string) error {
 			return true // continue iteration
 		}
 
-		// Signal the monitor to stop with safe type assertion
-		if quitChanTyped, okCh := value.(chan struct{}); okCh {
-			m.safeCloseChannel(quitChanTyped, source)
-		} else {
-			m.logger.Warn("Invalid quit channel type during monitor removal",
-				logger.String("source", source),
-				logger.String("model_id", mk.modelID),
-				logger.String("type", fmt.Sprintf("%T", value)),
-				logger.String("component", "analysis.buffer"))
-		}
-		// Remove from the map
-		m.monitors.Delete(key)
+		m.removeMonitorGeneration(key, value, source, mk.modelID)
 
 		return true
 	})
 
 	return nil
+}
+
+func (m *BufferManager) removeMonitorGeneration(key, value any, source, modelID string) bool {
+	if !m.monitors.CompareAndDelete(key, value) {
+		return false
+	}
+	if quitChan, ok := value.(chan struct{}); ok {
+		m.safeCloseChannel(quitChan, source)
+		return true
+	}
+	m.logger.Warn("Invalid quit channel type during monitor removal",
+		logger.String("source", source),
+		logger.String("model_id", modelID),
+		logger.String("type", fmt.Sprintf("%T", value)),
+		logger.String("component", "analysis.buffer"))
+	return true
 }
 
 // RemoveAllMonitors stops all running monitors.
@@ -344,11 +354,9 @@ func (m *BufferManager) UpdateMonitors(sourceModels map[string][]monitorConfig) 
 			return true // Should not happen
 		}
 		if _, exists := desiredKeys[mk]; !exists {
-			if quitChan, ok := value.(chan struct{}); ok {
-				m.safeCloseChannel(quitChan, mk.sourceID)
+			if m.removeMonitorGeneration(key, value, mk.sourceID, mk.modelID) {
+				removedCount++
 			}
-			m.monitors.Delete(key)
-			removedCount++
 		}
 		return true
 	})

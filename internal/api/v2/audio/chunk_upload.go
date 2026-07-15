@@ -24,6 +24,7 @@ const (
 	chunkUploadPermFile        = 0o644
 	chunkUploadPermDir         = 0o755
 	maxChunkUploadSourceIDLen  = 64
+	maxConcurrentChunkUploads  = 2
 
 	// ChunkUploadPath is the route pattern for bearer-token WAV chunk uploads.
 	ChunkUploadPath = "/streams/chunks/:source"
@@ -64,6 +65,11 @@ func (c *Handler) UploadAudioChunk(ctx echo.Context) error {
 		!strings.HasPrefix(contentType, "application/octet-stream") {
 		return c.HandleError(ctx, nil, "unsupported audio format", http.StatusUnsupportedMediaType)
 	}
+
+	if !c.acquireChunkUploadSlot() {
+		return c.HandleError(ctx, nil, "too many concurrent chunk uploads", http.StatusServiceUnavailable)
+	}
+	defer c.releaseChunkUploadSlot()
 
 	maxBytes := cfg.MaxBytes
 	if maxBytes <= 0 {
@@ -134,6 +140,22 @@ func (c *Handler) UploadAudioChunk(ctx echo.Context) error {
 		"processed": true,
 		"file":      filename,
 	})
+}
+
+func (c *Handler) acquireChunkUploadSlot() bool {
+	c.chunkUploadSlotsOnce.Do(func() {
+		c.chunkUploadSlots = make(chan struct{}, maxConcurrentChunkUploads)
+	})
+	select {
+	case c.chunkUploadSlots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Handler) releaseChunkUploadSlot() {
+	<-c.chunkUploadSlots
 }
 
 func persistChunkUpload(basePath, sourceID, sequenceHeader string, body []byte) (filePath, sourceDir, filename string, err error) {

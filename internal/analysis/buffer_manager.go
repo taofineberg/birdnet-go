@@ -225,19 +225,16 @@ func (m *BufferManager) AddMonitors(source string, models []monitorConfig) error
 						logger.String("component", "analysis.buffer"))
 				}
 
-				// Clean up monitor from map if it exits unexpectedly
-				if quitChanIface, exists := m.monitors.Load(key); exists {
-					// Safe type assertion
-					if quitChan, ok := quitChanIface.(chan struct{}); ok {
-						select {
-						case <-quitChan:
-							// Normal shutdown - quit channel was closed
-						default:
-							// Unexpected exit - safely close channel
-							m.safeCloseChannel(quitChan, source)
-						}
+				// Remove only this goroutine's generation. A replacement monitor may
+				// already occupy the same key after a model reconfiguration.
+				if m.monitors.CompareAndDelete(key, monitorQuit) {
+					select {
+					case <-monitorQuit:
+						// Normal shutdown - quit channel was closed.
+					default:
+						// Unexpected exit - safely close this generation only.
+						m.safeCloseChannel(monitorQuit, source)
 					}
-					m.monitors.Delete(key)
 				}
 			}()
 

@@ -26,6 +26,7 @@ package audio
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 
 	"github.com/labstack/echo/v4"
@@ -105,7 +106,9 @@ type Handler struct {
 
 	// chunkUploadIngestor is injected by the analysis pipeline once the router,
 	// buffers, and model consumers are ready.
-	chunkUploadIngestor atomic.Pointer[chunkUploadIngestorHolder]
+	chunkUploadIngestor  atomic.Pointer[chunkUploadIngestorHolder]
+	chunkUploadSlotsOnce sync.Once
+	chunkUploadSlots     chan struct{}
 
 	// removeChunkUploadFile is a test seam for rejected-upload cleanup.
 	removeChunkUploadFile func(string) error

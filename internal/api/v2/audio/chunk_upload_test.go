@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +28,17 @@ type mockChunkUploadIngestor struct {
 	err          error
 	beforeReturn func()
 }
+
+type readTrackingBody struct {
+	read bool
+}
+
+func (b *readTrackingBody) Read(_ []byte) (int, error) {
+	b.read = true
+	return 0, io.EOF
+}
+
+func (b *readTrackingBody) Close() error { return nil }
 
 func (m *mockChunkUploadIngestor) IngestAudioChunk(_ context.Context, sourceID string, wav []byte, maxSeconds int) error {
 	m.calls++
@@ -362,6 +374,35 @@ func TestUploadAudioChunk(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestUploadAudioChunkRejectsBeforeReadingWhenAtCapacity(t *testing.T) {
+	t.Parallel()
+
+	e, h := newChunkUploadHandler(t, conf.ChunkUploadSettings{
+		Enabled: true,
+		Token:   "expected-token",
+	})
+	require.True(t, h.acquireChunkUploadSlot())
+	require.True(t, h.acquireChunkUploadSlot())
+	t.Cleanup(func() {
+		h.releaseChunkUploadSlot()
+		h.releaseChunkUploadSlot()
+	})
+
+	body := &readTrackingBody{}
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/streams/chunks/yard", body)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer expected-token")
+	req.Header.Set(echo.HeaderContentType, "audio/wav")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/streams/chunks/:source")
+	ctx.SetParamNames("source")
+	ctx.SetParamValues("yard")
+
+	require.NoError(t, h.UploadAudioChunk(ctx))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.False(t, body.read)
 }
 
 func TestRegisterChunkUploadRoutes(t *testing.T) {

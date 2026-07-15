@@ -445,11 +445,17 @@ func validateChunkUploadSettings(settings *ChunkUploadSettings) error {
 			Context("validation_type", "chunk-upload-max-seconds").
 			Build()
 	}
-	if settings.Save && strings.TrimSpace(settings.Path) == "" {
-		return errors.Newf("chunk upload path must be configured when saving is enabled").
-			Category(errors.CategoryValidation).
-			Context("validation_type", "chunk-upload-path").
-			Build()
+	if settings.Save {
+		path := strings.TrimSpace(settings.Path)
+		if path == "" {
+			return errors.Newf("chunk upload path must be configured when saving is enabled").
+				Category(errors.CategoryValidation).
+				Context("validation_type", "chunk-upload-path").
+				Build()
+		}
+		if err := validateLocalPath(path, "chunk upload path", "chunk-upload-path"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -716,23 +722,27 @@ func validateNormalizationSettings(norm *NormalizationSettings, gain float64) er
 // or null bytes. Both relative and absolute paths are accepted: Docker
 // containers and install.sh legitimately use absolute paths like /data/clips/.
 func validateExportPath(path string) error {
+	return validateLocalPath(path, "audio export path", "audio-export-path")
+}
+
+func validateLocalPath(path, fieldName, validationType string) error {
 	if path == "" {
 		return nil
 	}
 
 	if strings.ContainsRune(path, '\x00') {
-		return errors.Newf("audio export path must not contain null bytes: %q", path).
+		return errors.Newf("%s must not contain null bytes: %q", fieldName, path).
 			Category(errors.CategoryValidation).
-			Context("validation_type", "audio-export-path").
+			Context("validation_type", validationType).
 			Context("path", path).
 			Build()
 	}
 
 	//nolint:gocritic // ruleguard suggests IsLocal alone, but IsLocal cleans "../x" to "x" (valid!); explicit ".." check is required for untrusted input per internal/CLAUDE.md
 	if strings.Contains(path, "..") {
-		return errors.Newf("audio export path must not contain path traversal (..): %q", path).
+		return errors.Newf("%s must not contain path traversal (..): %q", fieldName, path).
 			Category(errors.CategoryValidation).
-			Context("validation_type", "audio-export-path").
+			Context("validation_type", validationType).
 			Context("path", path).
 			Build()
 	}
@@ -742,9 +752,9 @@ func validateExportPath(path string) error {
 	if !filepath.IsAbs(path) {
 		cleanPath := filepath.Clean(path)
 		if !filepath.IsLocal(cleanPath) {
-			return errors.Newf("audio export path is not a safe local path: %q", path).
+			return errors.Newf("%s is not a safe local path: %q", fieldName, path).
 				Category(errors.CategoryValidation).
-				Context("validation_type", "audio-export-path").
+				Context("validation_type", validationType).
 				Context("path", path).
 				Build()
 		}

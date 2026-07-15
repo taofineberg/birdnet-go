@@ -142,4 +142,16 @@ describe('settingsCoercion realtime rtsp streams', () => {
 
     expect(result.rtsp.streams[0]?.gain).toBeUndefined();
   });
+
+  it('clamps chunk upload size to the backend minimum', () => {
+    const result = coerceSettings('realtime', {
+      audio: {
+        chunkUpload: {
+          maxBytes: 1,
+        },
+      },
+    }) as { audio: { chunkUpload: { maxBytes: number } } };
+
+    expect(result.audio.chunkUpload.maxBytes).toBe(1024 * 1024);
+  });
 });

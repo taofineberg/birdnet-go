@@ -37,6 +37,7 @@ type PartialNotificationSettings = Partial<NotificationSettings> & UnknownSettin
 type PartialFalsePositiveFilterSettings = Partial<FalsePositiveFilterSettings> & UnknownSettings;
 
 const DEFAULT_CHUNK_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const MIN_CHUNK_UPLOAD_BYTES = 1 * 1024 * 1024;
 const MAX_CHUNK_UPLOAD_BYTES = 100 * 1024 * 1024;
 const DEFAULT_CHUNK_UPLOAD_MAX_SECONDS = 15;
 const MAX_CHUNK_UPLOAD_MAX_SECONDS = 300;
@@ -306,7 +307,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
       save: coerceBoolean(upload.save, false),
       maxBytes: coerceNumber(
         upload.maxBytes,
-        1,
+        MIN_CHUNK_UPLOAD_BYTES,
         MAX_CHUNK_UPLOAD_BYTES,
         DEFAULT_CHUNK_UPLOAD_MAX_BYTES
       ),

@@ -108,3 +108,72 @@ func TestChunkUploadPacerRetiresOnlyWhenIdle(t *testing.T) {
 		t.Fatal("retired pacer stop channel was not closed")
 	}
 }
+
+func TestChunkUploadPCMMemoryBudget(t *testing.T) {
+	t.Parallel()
+
+	pipeline := &AudioPipelineService{}
+	require.True(t, pipeline.reserveChunkUploadPCM(int(maxChunkUploadPCMBytes)))
+	assert.False(t, pipeline.reserveChunkUploadPCM(1))
+	pipeline.chunkUploadPCMBytes.Add(-maxChunkUploadPCMBytes)
+	assert.True(t, pipeline.reserveChunkUploadPCM(1))
+}
+
+func TestChunkUploadStoppingState(t *testing.T) {
+	t.Parallel()
+
+	pipeline := &AudioPipelineService{}
+	assert.False(t, pipeline.chunkUploadsStopping())
+	pipeline.chunkUploadMu.Lock()
+	pipeline.chunkUploadStopping = true
+	pipeline.chunkUploadMu.Unlock()
+	assert.True(t, pipeline.chunkUploadsStopping())
+}
+
+func TestChunkUploadShutdownRejectsLateEnqueueAndDrainsQueuedPCM(t *testing.T) {
+	t.Parallel()
+
+	pipeline := &AudioPipelineService{
+		done:              make(chan struct{}),
+		chunkUploadPacers: map[string]*chunkUploadPacer{},
+	}
+	pacer := &chunkUploadPacer{
+		ch:           make(chan chunkUploadPCM, 2),
+		lastActivity: time.Now(),
+		accepting:    true,
+		stop:         make(chan struct{}),
+	}
+	pipeline.chunkUploadPacers["chunk_test"] = pacer
+
+	pcm := []byte("queued-pcm")
+	require.True(t, pipeline.reserveChunkUploadPCM(len(pcm)))
+	require.NoError(t, pacer.enqueue(t.Context(), pipeline.done, chunkUploadPCM{
+		sourceID: "chunk_test",
+		pcm:      pcm,
+	}))
+
+	pipeline.stopAcceptingChunkUploads()
+	err := pacer.enqueue(t.Context(), pipeline.done, chunkUploadPCM{sourceID: "chunk_test", pcm: []byte("late")})
+	require.ErrorIs(t, err, audiocore.ErrChunkUploadUnavailable)
+
+	close(pipeline.done)
+	pipeline.wg.Add(1)
+	go pipeline.runChunkUploadPacer("chunk_test", pacer)
+	waitDone := make(chan struct{})
+	go func() {
+		pipeline.wg.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+	case <-time.After(time.Second):
+		t.Fatal("chunk upload pacer did not stop")
+	}
+
+	assert.Zero(t, pipeline.chunkUploadPCMBytes.Load())
+	assert.Empty(t, pacer.ch)
+	pipeline.chunkUploadMu.Lock()
+	_, stillTracked := pipeline.chunkUploadPacers["chunk_test"]
+	pipeline.chunkUploadMu.Unlock()
+	assert.False(t, stillTracked)
+}

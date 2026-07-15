@@ -25,6 +25,8 @@ func TestValidateChunkUploadSettings(t *testing.T) {
 		{name: "small body limit", mutate: func(s *ChunkUploadSettings) { s.MaxBytes = 1 }, match: "maxBytes"},
 		{name: "long duration", mutate: func(s *ChunkUploadSettings) { s.MaxSeconds = 301 }, match: "maxSeconds"},
 		{name: "blank save path", mutate: func(s *ChunkUploadSettings) { s.Path = " " }, match: "path"},
+		{name: "traversing save path", mutate: func(s *ChunkUploadSettings) { s.Path = "../outside" }, match: "path traversal"},
+		{name: "null byte in save path", mutate: func(s *ChunkUploadSettings) { s.Path = "chunks\x00outside" }, match: "null bytes"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

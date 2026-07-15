@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -86,6 +87,7 @@ type AudioPipelineService struct {
 	chunkUploadMu       sync.Mutex
 	chunkUploadPacers   map[string]*chunkUploadPacer
 	chunkUploadStopping bool
+	chunkUploadPCMBytes atomic.Int64
 }
 
 // NewAudioPipelineService creates a new AudioPipelineService with the given dependencies.
@@ -419,9 +421,12 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 		logger.String("operation", "graceful_shutdown"))
 
 	// Prevent new per-source chunk pacers from being added before Wait begins.
-	p.chunkUploadMu.Lock()
-	p.chunkUploadStopping = true
-	p.chunkUploadMu.Unlock()
+	p.stopAcceptingChunkUploads()
+	if p.apiService != nil {
+		if ctrl := p.apiService.APIController(); ctrl != nil {
+			ctrl.SetChunkUploadIngestor(nil)
+		}
+	}
 
 	// Stop control monitor.
 	if p.ctrlMonitor != nil {
@@ -609,6 +614,9 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 // The operation parameter is used for log messages to distinguish callers.
 func (p *AudioPipelineService) removeAllSources(operation string) {
 	for _, src := range p.engine.Registry().List() {
+		if src.Type == audiocore.SourceTypeChunkUpload {
+			continue
+		}
 		if err := p.engine.RemoveSource(src.ID); err != nil {
 			audiocore.GetLogger().Warn("failed to remove source",
 				logger.String("source_id", src.ID),
@@ -616,11 +624,15 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 				logger.String("operation", operation))
 		}
 	}
-	// engine.RemoveSource removes router routes but has no knowledge of the
-	// soundlevel tracking map. Clear the map to keep it in sync with actual
-	// router state so the next registerSoundLevelConsumers call (e.g. after
-	// restartAudioCapture) does not skip sources due to stale entries.
-	p.untrackAllSoundLevelConsumers()
+	// Static-source removal does not affect dynamic chunk-upload routes. Remove
+	// only stale tracking entries for sources that are no longer registered.
+	p.soundLevelMu.Lock()
+	for sourceID := range p.soundLevelConsumers {
+		if _, ok := p.engine.Registry().Get(sourceID); !ok {
+			delete(p.soundLevelConsumers, sourceID)
+		}
+	}
+	p.soundLevelMu.Unlock()
 	ResetOverrunTrackers()
 }
 
@@ -661,13 +673,15 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	p.registerConsumersForSources(sourceIDs, sourceModelMap, audioLevelChan, operation)
 	p.registerSoundLevelConsumers(sourceIDs, operation)
 
-	// Update buffer monitors for the new sources.
-	if len(sourceIDs) > 0 {
-		sourceMonitorConfigs := p.buildMonitorConfigs(sourceModelMap, sourceIDs)
+	// Update buffer monitors with the complete desired state. Dynamic upload
+	// sources survive static capture restarts and must remain in this map.
+	monitorSourceIDs := p.includeChunkUploadMonitorState(sourceModelMap, sourceIDs)
+	if len(monitorSourceIDs) > 0 {
+		sourceMonitorConfigs := p.buildMonitorConfigs(sourceModelMap, monitorSourceIDs)
 		if monErr := p.bufferMgr.UpdateMonitors(sourceMonitorConfigs); monErr != nil {
 			log.Warn("buffer monitor update completed with errors",
 				logger.Error(monErr),
-				logger.Int("source_count", len(sourceIDs)),
+				logger.Int("source_count", len(monitorSourceIDs)),
 				logger.String("component", "analysis.audio_pipeline"),
 				logger.String("operation", operation))
 		}
@@ -1319,6 +1333,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
 	allActiveIDs = append(allActiveIDs, newSourceIDs...)
+	allActiveIDs = p.includeChunkUploadMonitorState(sourceModelMap, allActiveIDs)
 	// Always call UpdateMonitors (even with an empty slice) so stale
 	// monitors are torn down when the last active stream is disabled.
 	if p.bufferMgr != nil {
